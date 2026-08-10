@@ -228,6 +228,30 @@ export default function DiscoverPage() {
     setProgress(0)
     setDuration(0)
 
+    // Increment play count
+    const songId = song.id || song._id
+    if (songId) {
+      const token = localStorage.getItem("zeno_token")
+      fetch(`${API_BASE}/music/${songId}/play`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }).then((playRes) => {
+        if (playRes.ok) {
+          playRes.json().then((playData) => {
+            if (playData.playCount !== undefined) {
+              setSongs(prev => prev.map(s => (s.id === song.id || s._id === song._id)
+                ? { ...s, plays: playData.playCount, playCount: playData.playCount, totalPlays: playData.playCount }
+                : s
+              ))
+            }
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    }
+
     // Play after src is set
     setTimeout(() => {
       audioRef.current?.play()
