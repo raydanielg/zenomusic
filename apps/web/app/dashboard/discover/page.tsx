@@ -8,27 +8,75 @@ import { Card } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { IconPlayerPlay, IconRefresh, IconLoader2, IconCompass, IconDots, IconEye, IconMessage2, IconHeart } from "@tabler/icons-react"
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 interface DiscoverSong {
-  id: string
-  title: string
-  status: string
-  visibility: string
+  id?: string
+  _id?: string
+  title?: string
+  name?: string
+  status?: string
+  visibility?: string
+  isPublic?: boolean
   genre?: string
   style?: string
+  tags?: string[]
+  coverArt?: string
   coverUrl?: string
+  cover?: string
+  coverImage?: string
+  image?: string
+  imageData?: string
   audioUrl?: string
+  audio?: string
   comments?: number
+  commentCount?: number
   plays?: number
+  playCount?: number
+  totalPlays?: number
+  views?: number
   likes?: number
+  likeCount?: number
   createdAt?: string
-  author?: { name?: string; avatar?: string }
+  created_at?: string
+  updatedAt?: string
+  author?: { name?: string; username?: string; avatar?: string; photoURL?: string }
+}
+
+function getCoverUrl(song: DiscoverSong): string | null {
+  const raw = song.coverArt || song.coverUrl || song.cover || song.coverImage || song.image || song.imageData
+  if (!raw) return null
+  if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
+  if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
+    const mime = raw.startsWith("iVBORw0") ? "image/png" : raw.startsWith("UklGR") ? "image/webp" : "image/jpeg"
+    return `data:${mime};base64,${raw}`
+  }
+  return raw
+}
+
+function getSongTitle(song: DiscoverSong): string {
+  return song.title || song.name || "Untitled"
+}
+
+function getSongGenre(song: DiscoverSong): string {
+  if (song.genre) return song.genre
+  if (song.style) return song.style
+  if (song.tags && song.tags.length > 0) return song.tags.join(", ")
+  return "Unknown genre"
+}
+
+function getSongDate(song: DiscoverSong): string {
+  return song.createdAt || song.created_at || song.updatedAt || ""
+}
+
+function getSongId(song: DiscoverSong, index: number): string {
+  return song.id || song._id || `song-${index}`
 }
 
 function timeAgo(dateStr?: string) {
   if (!dateStr) return ""
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ""
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
   if (seconds < 60) return "just now"
   const minutes = Math.floor(seconds / 60)
@@ -145,11 +193,14 @@ export default function DiscoverPage() {
 
                 {!loading && !error && songs.length > 0 && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {songs.map((song, i) => (
-                      <Card key={song.id || i} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
+                    {songs.map((song, i) => {
+                      const cover = getCoverUrl(song)
+                      const authorAvatar = song.author?.avatar || song.author?.photoURL
+                      return (
+                      <Card key={getSongId(song, i)} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
                         <div className="relative h-36 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
-                          {song.coverUrl && (
-                            <img src={song.coverUrl} alt={song.title} className="absolute inset-0 h-full w-full object-cover" />
+                          {cover && (
+                            <img src={cover} alt={getSongTitle(song)} className="absolute inset-0 h-full w-full object-cover" />
                           )}
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition-all group-hover:scale-110 group-hover:opacity-100">
@@ -161,39 +212,40 @@ export default function DiscoverPage() {
                               {song.status || "completed"}
                             </span>
                           </div>
-                          {song.author?.avatar && (
+                          {authorAvatar && (
                             <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                              <img src={song.author.avatar} alt={song.author.name} className="h-5 w-5 rounded-full border border-white/30" />
-                              <span className="text-[10px] font-medium text-white">{song.author.name}</span>
+                              <img src={authorAvatar} alt={song.author?.name || song.author?.username} className="h-5 w-5 rounded-full border border-white/30" />
+                              <span className="text-[10px] font-medium text-white">{song.author?.name || song.author?.username}</span>
                             </div>
                           )}
                         </div>
                         <div className="p-3 space-y-2">
                           <div className="flex items-center justify-between">
-                            <h3 className="truncate text-sm font-medium">{song.title}</h3>
+                            <h3 className="truncate text-sm font-medium">{getSongTitle(song)}</h3>
                             <button className="text-muted-foreground hover:text-foreground">
                               <IconDots className="h-4 w-4" />
                             </button>
                           </div>
-                          <p className="truncate text-xs text-muted-foreground">{song.genre || song.style || "Unknown genre"}</p>
+                          <p className="truncate text-xs text-muted-foreground">{getSongGenre(song)}</p>
                           <div className="flex items-center gap-3 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <IconHeart className="h-3 w-3" />
-                              {song.likes || 0}
+                              {song.likes || song.likeCount || 0}
                             </span>
                             <span className="flex items-center gap-1">
                               <IconMessage2 className="h-3 w-3" />
-                              {song.comments || 0}
+                              {song.comments || song.commentCount || 0}
                             </span>
                             <span className="flex items-center gap-1">
                               <IconEye className="h-3 w-3" />
-                              {song.plays || 0}
+                              {song.plays || song.playCount || song.totalPlays || song.views || 0}
                             </span>
-                            <span className="ml-auto text-[10px]">{timeAgo(song.createdAt)}</span>
+                            <span className="ml-auto text-[10px]">{timeAgo(getSongDate(song))}</span>
                           </div>
                         </div>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

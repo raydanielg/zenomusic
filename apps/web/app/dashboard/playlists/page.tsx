@@ -8,17 +8,44 @@ import { Card, CardContent } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { IconPlaylist, IconRefresh, IconLoader2, IconDots, IconPlus, IconMusic } from "@tabler/icons-react"
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 interface Playlist {
-  id: string
-  name: string
+  id?: string
+  _id?: string
+  name?: string
+  title?: string
   description?: string
+  coverArt?: string
   coverUrl?: string
+  cover?: string
+  coverImage?: string
+  image?: string
+  imageData?: string
   songCount?: number
-  songs?: { id: string; title: string; coverUrl?: string }[]
+  songs?: { id?: string; _id?: string; title?: string; name?: string; coverUrl?: string }[]
   createdAt?: string
+  created_at?: string
   updatedAt?: string
+}
+
+function getPlaylistCover(playlist: Playlist): string | null {
+  const raw = playlist.coverArt || playlist.coverUrl || playlist.cover || playlist.coverImage || playlist.image || playlist.imageData
+  if (!raw) return null
+  if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
+  if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
+    const mime = raw.startsWith("iVBORw0") ? "image/png" : raw.startsWith("UklGR") ? "image/webp" : "image/jpeg"
+    return `data:${mime};base64,${raw}`
+  }
+  return raw
+}
+
+function getPlaylistName(playlist: Playlist): string {
+  return playlist.name || playlist.title || "Untitled Playlist"
+}
+
+function getPlaylistId(playlist: Playlist, index: number): string {
+  return playlist.id || playlist._id || `playlist-${index}`
 }
 
 export default function PlaylistsPage() {
@@ -53,7 +80,7 @@ export default function PlaylistsPage() {
       }
 
       const data = await res.json()
-      const list = Array.isArray(data) ? data : data.playlists || data.data || []
+      const list = Array.isArray(data) ? data : data.playlists || data.data || data.items || []
       setPlaylists(list)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load playlists")
@@ -136,20 +163,22 @@ export default function PlaylistsPage() {
 
                 {!loading && !error && playlists.length > 0 && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {playlists.map((playlist, i) => (
-                      <Card key={playlist.id || i} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
+                    {playlists.map((playlist, i) => {
+                      const cover = getPlaylistCover(playlist)
+                      return (
+                      <Card key={getPlaylistId(playlist, i)} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
                         <div className="relative h-40 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600">
-                          {playlist.coverUrl && (
-                            <img src={playlist.coverUrl} alt={playlist.name} className="absolute inset-0 h-full w-full object-cover" />
+                          {cover && (
+                            <img src={cover} alt={getPlaylistName(playlist)} className="absolute inset-0 h-full w-full object-cover" />
                           )}
-                          {!playlist.coverUrl && (
+                          {!cover && (
                             <div className="absolute inset-0 flex items-center justify-center">
                               <IconMusic className="h-12 w-12 text-white/30" />
                             </div>
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
                           <div className="absolute bottom-3 left-3 right-3">
-                            <h3 className="truncate text-base font-semibold text-white">{playlist.name}</h3>
+                            <h3 className="truncate text-base font-semibold text-white">{getPlaylistName(playlist)}</h3>
                             {playlist.description && (
                               <p className="truncate text-xs text-white/70">{playlist.description}</p>
                             )}
@@ -166,7 +195,8 @@ export default function PlaylistsPage() {
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

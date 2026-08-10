@@ -7,9 +7,9 @@ import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@workspace/ui/components/tabs"
-import { IconSparkles, IconPlayerPlay, IconRefresh, IconMessage2, IconEye, IconLock, IconWorld, IconCoin, IconPlus, IconDots, IconLoader2, IconMusic } from "@tabler/icons-react"
+import { IconSparkles, IconPlayerPlay, IconRefresh, IconMessage2, IconEye, IconLock, IconWorld, IconCoin, IconPlus, IconDots, IconLoader2, IconMusic, IconFlame } from "@tabler/icons-react"
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 const genreTags = [
   "Afrobeats", "Amapiano", "Pop", "R&B", "Hip Hop", "Gospel",
@@ -27,6 +27,7 @@ interface Song {
   genre?: string
   style?: string
   tags?: string[]
+  coverArt?: string
   coverUrl?: string
   cover?: string
   coverImage?: string
@@ -38,6 +39,7 @@ interface Song {
   commentCount?: number
   plays?: number
   playCount?: number
+  totalPlays?: number
   views?: number
   likes?: number
   likeCount?: number
@@ -47,7 +49,7 @@ interface Song {
 }
 
 function getCoverUrl(song: Song): string | null {
-  const raw = song.coverUrl || song.cover || song.coverImage || song.image || song.imageData
+  const raw = song.coverArt || song.coverUrl || song.cover || song.coverImage || song.image || song.imageData
   if (!raw) return null
   if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
   if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
@@ -94,9 +96,15 @@ export default function Page() {
   const [songs, setSongs] = useState<Song[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [credits, setCredits] = useState(0)
+  const [credits, setCredits] = useState(() => {
+    if (typeof window !== "undefined") {
+      return parseInt(localStorage.getItem("zeno_credits") || "0")
+    }
+    return 0
+  })
   const [lastUpdated, setLastUpdated] = useState("")
   const [token, setToken] = useState("")
+  const [streak, setStreak] = useState<{ current?: number; longest?: number; lastActive?: string } | null>(null)
 
   const fetchHistory = useCallback(async () => {
     const storedToken = localStorage.getItem("zeno_token")
@@ -129,12 +137,31 @@ export default function Page() {
       }
 
       const data = await res.json()
-      const history = Array.isArray(data) ? data : data.history || data.songs || data.data || []
+      const history = Array.isArray(data) ? data : data.history || data.songs || data.data || data.items || []
       setSongs(history)
       setLastUpdated(new Date().toLocaleTimeString())
 
       if (data.credits !== undefined) {
         setCredits(data.credits)
+        localStorage.setItem("zeno_credits", String(data.credits))
+      } else {
+        // Fetch credits from signin-sync
+        fetch(`${API_BASE}/auth/signin-sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${storedToken}`,
+          },
+          body: JSON.stringify({}),
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.credits !== undefined) {
+              setCredits(d.credits)
+              localStorage.setItem("zeno_credits", String(d.credits))
+            }
+          })
+          .catch(() => {})
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load library")
@@ -146,6 +173,28 @@ export default function Page() {
   useEffect(() => {
     fetchHistory()
   }, [fetchHistory])
+
+  // Fetch engagement streak
+  useEffect(() => {
+    const storedToken = localStorage.getItem("zeno_token")
+    if (!storedToken) return
+
+    fetch(`${API_BASE}/music/engagement/streak`, {
+      headers: {
+        Authorization: `Bearer ${storedToken}`,
+        Accept: "application/json",
+      },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setStreak({
+          current: data.currentStreak ?? data.current ?? data.streak ?? 0,
+          longest: data.longestStreak ?? data.longest ?? data.maxStreak ?? 0,
+          lastActive: data.lastActiveDate ?? data.lastActive ?? data.updatedAt,
+        })
+      })
+      .catch(() => {})
+  }, [])
 
   const hasCredits = credits > 0
   return (
@@ -172,6 +221,12 @@ export default function Page() {
                     <div className="flex items-center justify-between">
                       <h1 className="text-2xl font-bold tracking-tight">Create Song</h1>
                       <div className="flex items-center gap-3">
+                        {streak && streak.current !== undefined && streak.current > 0 && (
+                          <div className="flex items-center gap-1.5 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5">
+                            <IconFlame className="h-4 w-4 text-orange-500" />
+                            <span className="text-sm font-medium">{streak.current} day streak</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5 rounded-lg border border-border/40 px-3 py-1.5">
                           <IconCoin className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm font-medium">{credits} credits</span>
@@ -402,7 +457,7 @@ export default function Page() {
                             </span>
                             <span className="flex items-center gap-1">
                               <IconEye className="h-3 w-3" />
-                              {song.plays || song.playCount || song.views || 0}
+                              {song.plays || song.playCount || song.totalPlays || song.views || 0}
                             </span>
                             <span className="ml-auto text-[10px]">
                               {getSongDate(song) ? timeAgo(getSongDate(song)) : ""}

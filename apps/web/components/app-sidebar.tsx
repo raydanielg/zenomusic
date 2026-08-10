@@ -16,7 +16,7 @@ import {
 } from "@workspace/ui/components/sidebar"
 import { IconMusic, IconSparkles, IconLibrary, IconVideo, IconCompass, IconPlaylist, IconUser, IconLogout } from "@tabler/icons-react"
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 const data = {
   navMain: [
@@ -69,6 +69,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   })
 
   React.useEffect(() => {
+    // Read from localStorage first (set during login)
+    const storedName = localStorage.getItem("zeno_display_name")
+    const storedCredits = localStorage.getItem("zeno_credits")
+    const storedAvatar = localStorage.getItem("zeno_avatar")
+    const storedUsername = localStorage.getItem("zeno_username")
+
+    if (storedName || storedCredits || storedAvatar) {
+      setUser({
+        name: storedName || (storedUsername ? `@${storedUsername}` : "Zeno User"),
+        email: `${storedCredits || 0} credits`,
+        avatar: storedAvatar || "/avatars/shadcn.jpg",
+      })
+    }
+
     const token = localStorage.getItem("zeno_token")
     if (!token) return
 
@@ -85,15 +99,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
         if (res.ok) {
           const data = await res.json().catch(() => ({}))
-          const userId = localStorage.getItem("zeno_user_id") || ""
-          setUser({
-            name: data.name || data.displayName || data.phoneNumber || `User ${userId.slice(-4)}`,
-            email: `${data.credits ?? 0} credits`,
-            avatar: data.photoURL || "/avatars/shadcn.jpg",
-          })
+          const username = data.username || data.userId || data.id || storedUsername || ""
+          const credits = data.credits ?? parseInt(storedCredits || "0")
+          const name = data.displayName || data.name || data.phoneNumber || (username ? `@${username}` : "Zeno User")
+          const avatar = data.photoURL || data.avatar || storedAvatar || "/avatars/shadcn.jpg"
+
+          // Update localStorage with fresh data
+          if (username) localStorage.setItem("zeno_username", username)
+          if (data.credits !== undefined) localStorage.setItem("zeno_credits", String(data.credits))
+          if (data.displayName || data.name) localStorage.setItem("zeno_display_name", data.displayName || data.name)
+          if (data.photoURL || data.avatar) localStorage.setItem("zeno_avatar", data.photoURL || data.avatar)
+
+          setUser({ name, email: `${credits} credits`, avatar })
         }
       } catch {
-        // Silent fail — keep default user
+        // Silent fail — keep localStorage data
       }
     }
 

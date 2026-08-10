@@ -8,25 +8,75 @@ import { Card } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { IconPlayerPlay, IconRefresh, IconLoader2, IconVideo, IconDots, IconEye, IconMessage2 } from "@tabler/icons-react"
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 interface VideoItem {
-  id: string
-  title: string
-  status: string
-  videoUrl?: string
-  thumbnailUrl?: string
+  id?: string
+  _id?: string
+  title?: string
+  name?: string
   songTitle?: string
+  status?: string
+  videoUrl?: string
+  video?: string
+  thumbnailUrl?: string
+  thumbnail?: string
+  coverArt?: string
+  coverUrl?: string
+  cover?: string
+  coverImage?: string
+  image?: string
+  imageData?: string
   genre?: string
   style?: string
+  tags?: string[]
   comments?: number
+  commentCount?: number
   plays?: number
+  playCount?: number
+  totalPlays?: number
+  views?: number
+  likes?: number
+  likeCount?: number
   createdAt?: string
+  created_at?: string
+  updatedAt?: string
+}
+
+function getVideoCover(video: VideoItem): string | null {
+  const raw = video.thumbnailUrl || video.thumbnail || video.coverArt || video.coverUrl || video.cover || video.coverImage || video.image || video.imageData
+  if (!raw) return null
+  if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
+  if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
+    const mime = raw.startsWith("iVBORw0") ? "image/png" : raw.startsWith("UklGR") ? "image/webp" : "image/jpeg"
+    return `data:${mime};base64,${raw}`
+  }
+  return raw
+}
+
+function getVideoTitle(video: VideoItem): string {
+  return video.title || video.name || video.songTitle || "Untitled"
+}
+
+function getVideoGenre(video: VideoItem): string {
+  if (video.genre) return video.genre
+  if (video.style) return video.style
+  if (video.tags && video.tags.length > 0) return video.tags.join(", ")
+  return ""
+}
+
+function getVideoDate(video: VideoItem): string {
+  return video.createdAt || video.created_at || video.updatedAt || ""
+}
+
+function getVideoId(video: VideoItem, index: number): string {
+  return video.id || video._id || `video-${index}`
 }
 
 function timeAgo(dateStr?: string) {
   if (!dateStr) return ""
   const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return ""
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
   if (seconds < 60) return "just now"
   const minutes = Math.floor(seconds / 60)
@@ -143,11 +193,13 @@ export default function VideoPage() {
 
                 {!loading && !error && videos.length > 0 && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {videos.map((video, i) => (
-                      <Card key={video.id || i} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
+                    {videos.map((video, i) => {
+                      const thumb = getVideoCover(video)
+                      return (
+                      <Card key={getVideoId(video, i)} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
                         <div className="relative aspect-video bg-gradient-to-br from-purple-600 via-blue-600 to-cyan-500">
-                          {video.thumbnailUrl && (
-                            <img src={video.thumbnailUrl} alt={video.title} className="absolute inset-0 h-full w-full object-cover" />
+                          {thumb && (
+                            <img src={thumb} alt={getVideoTitle(video)} className="absolute inset-0 h-full w-full object-cover" />
                           )}
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition-all group-hover:scale-110 group-hover:opacity-100">
@@ -162,28 +214,29 @@ export default function VideoPage() {
                         </div>
                         <div className="p-3 space-y-2">
                           <div className="flex items-center justify-between">
-                            <h3 className="truncate text-sm font-medium">{video.title || video.songTitle || "Untitled"}</h3>
+                            <h3 className="truncate text-sm font-medium">{getVideoTitle(video)}</h3>
                             <button className="text-muted-foreground hover:text-foreground">
                               <IconDots className="h-4 w-4" />
                             </button>
                           </div>
-                          {video.genre && (
-                            <p className="truncate text-xs text-muted-foreground">{video.genre}</p>
+                          {getVideoGenre(video) && (
+                            <p className="truncate text-xs text-muted-foreground">{getVideoGenre(video)}</p>
                           )}
                           <div className="flex items-center gap-4 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <IconMessage2 className="h-3 w-3" />
-                              {video.comments || 0}
+                              {video.comments || video.commentCount || 0}
                             </span>
                             <span className="flex items-center gap-1">
                               <IconEye className="h-3 w-3" />
-                              {video.plays || 0}
+                              {video.plays || video.playCount || video.totalPlays || video.views || 0}
                             </span>
-                            <span className="ml-auto text-[10px]">{timeAgo(video.createdAt)}</span>
+                            <span className="ml-auto text-[10px]">{timeAgo(getVideoDate(video))}</span>
                           </div>
                         </div>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>

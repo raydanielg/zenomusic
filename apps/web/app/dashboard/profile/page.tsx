@@ -8,27 +8,57 @@ import { Card, CardContent } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { IconRefresh, IconLoader2, IconUser, IconMusic, IconEye, IconHeart, IconCoin, IconEdit, IconCalendar } from "@tabler/icons-react"
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 interface UserProfile {
   id?: string
+  _id?: string
   username?: string
+  userId?: string
   displayName?: string
   name?: string
   email?: string
   phoneNumber?: string
   photoURL?: string
   avatar?: string
+  image?: string
+  imageData?: string
   bio?: string
+  about?: string
   credits?: number
   createdAt?: string
+  created_at?: string
+  joinedAt?: string
   stats?: {
     songs?: number
+    trackCount?: number
     plays?: number
+    playCount?: number
+    totalPlays?: number
     likes?: number
+    likeCount?: number
+    totalLikes?: number
     followers?: number
+    followerCount?: number
     following?: number
+    followingCount?: number
   }
+}
+
+function getAvatar(profile: UserProfile | null): string {
+  if (!profile) return "/avatars/shadcn.jpg"
+  const raw = profile.photoURL || profile.avatar || profile.image || profile.imageData
+  if (!raw) {
+    // Check localStorage for avatar stored during login
+    const stored = localStorage.getItem("zeno_avatar")
+    return stored || "/avatars/shadcn.jpg"
+  }
+  if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
+  if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
+    const mime = raw.startsWith("iVBORw0") ? "image/png" : raw.startsWith("UklGR") ? "image/webp" : "image/jpeg"
+    return `data:${mime};base64,${raw}`
+  }
+  return raw
 }
 
 export default function ProfilePage() {
@@ -38,7 +68,7 @@ export default function ProfilePage() {
 
   const fetchProfile = useCallback(async () => {
     const token = localStorage.getItem("zeno_token")
-    const userId = localStorage.getItem("zeno_user_id") || ""
+    const userId = localStorage.getItem("zeno_username") || localStorage.getItem("zeno_user_id") || ""
     if (!token) {
       setError("Not authenticated")
       setLoading(false)
@@ -64,7 +94,15 @@ export default function ProfilePage() {
       }
 
       const data = await res.json()
-      setProfile(data)
+      // Merge with localStorage data as fallback
+      const merged = {
+        ...data,
+        username: data.username || localStorage.getItem("zeno_username") || undefined,
+        credits: data.credits ?? parseInt(localStorage.getItem("zeno_credits") || "0"),
+        photoURL: data.photoURL || data.avatar || localStorage.getItem("zeno_avatar") || undefined,
+        displayName: data.displayName || data.name || localStorage.getItem("zeno_display_name") || undefined,
+      }
+      setProfile(merged)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load profile")
     } finally {
@@ -76,9 +114,11 @@ export default function ProfilePage() {
     fetchProfile()
   }, [fetchProfile])
 
-  const displayName = profile?.displayName || profile?.name || profile?.username || "Zeno User"
-  const avatar = profile?.photoURL || profile?.avatar || "/avatars/shadcn.jpg"
+  const displayName = profile?.displayName || profile?.name || profile?.username || (localStorage.getItem("zeno_username") ? `@${localStorage.getItem("zeno_username")}` : "Zeno User")
+  const avatar = getAvatar(profile)
   const stats = profile?.stats || {}
+  const bio = profile?.bio || profile?.about
+  const joinDate = profile?.createdAt || profile?.created_at || profile?.joinedAt
 
   return (
     <SidebarProvider
@@ -144,12 +184,12 @@ export default function ProfilePage() {
                               <p className="text-sm text-muted-foreground">@{profile.username}</p>
                             )}
                             {profile.bio && (
-                              <p className="mt-2 text-sm text-muted-foreground">{profile.bio}</p>
+                              <p className="mt-2 text-sm text-muted-foreground">{bio}</p>
                             )}
-                            {profile.createdAt && (
+                            {joinDate && (
                               <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
                                 <IconCalendar className="h-3 w-3" />
-                                Joined {new Date(profile.createdAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                                Joined {new Date(joinDate).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
                               </p>
                             )}
                           </div>
@@ -169,7 +209,7 @@ export default function ProfilePage() {
                             <IconMusic className="h-5 w-5 text-primary" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold">{stats.songs ?? 0}</p>
+                            <p className="text-2xl font-bold">{stats.songs ?? stats.trackCount ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Songs</p>
                           </div>
                         </CardContent>
@@ -180,7 +220,7 @@ export default function ProfilePage() {
                             <IconEye className="h-5 w-5 text-blue-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold">{stats.plays ?? 0}</p>
+                            <p className="text-2xl font-bold">{stats.plays ?? stats.playCount ?? stats.totalPlays ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Plays</p>
                           </div>
                         </CardContent>
@@ -191,7 +231,7 @@ export default function ProfilePage() {
                             <IconHeart className="h-5 w-5 text-red-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold">{stats.likes ?? 0}</p>
+                            <p className="text-2xl font-bold">{stats.likes ?? stats.likeCount ?? stats.totalLikes ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Likes</p>
                           </div>
                         </CardContent>
@@ -202,7 +242,7 @@ export default function ProfilePage() {
                             <IconUser className="h-5 w-5 text-emerald-500" />
                           </div>
                           <div>
-                            <p className="text-2xl font-bold">{stats.followers ?? 0}</p>
+                            <p className="text-2xl font-bold">{stats.followers ?? stats.followerCount ?? 0}</p>
                             <p className="text-xs text-muted-foreground">Followers</p>
                           </div>
                         </CardContent>

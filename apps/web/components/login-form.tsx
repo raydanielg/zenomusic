@@ -33,7 +33,7 @@ function FacebookIcon() {
   )
 }
 
-const API_BASE = "https://zenomusic.io/api"
+const API_BASE = "/api/zeno"
 
 export function LoginForm({
   className,
@@ -124,7 +124,7 @@ export function LoginForm({
       const idToken = firebaseData.idToken
 
       // Step 3: Sync signin with backend
-      await fetch(`${API_BASE}/auth/signin-sync`, {
+      const syncRes = await fetch(`${API_BASE}/auth/signin-sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -133,10 +133,26 @@ export function LoginForm({
         body: JSON.stringify({}),
       })
 
+      const syncData = await syncRes.json().catch(() => ({}))
+
       // Store tokens
       localStorage.setItem("zeno_token", idToken)
       localStorage.setItem("zeno_refresh_token", firebaseData.refreshToken || "")
       localStorage.setItem("zeno_user_id", firebaseData.localId || "")
+
+      // Store user profile data from signin-sync
+      if (syncData.username || syncData.userId || syncData.id) {
+        localStorage.setItem("zeno_username", syncData.username || syncData.userId || syncData.id || "")
+      }
+      if (syncData.credits !== undefined) {
+        localStorage.setItem("zeno_credits", String(syncData.credits))
+      }
+      if (syncData.displayName || syncData.name) {
+        localStorage.setItem("zeno_display_name", syncData.displayName || syncData.name || "")
+      }
+      if (syncData.photoURL || syncData.avatar) {
+        localStorage.setItem("zeno_avatar", syncData.photoURL || syncData.avatar || "")
+      }
 
       setSuccess(true)
       setTimeout(() => {
