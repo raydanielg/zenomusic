@@ -7,7 +7,7 @@ import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@workspace/ui/components/tabs"
-import { IconSparkles, IconPlayerPlay, IconRefresh, IconMessage2, IconEye, IconLock, IconWorld, IconCoin, IconPlus, IconDots, IconLoader2, IconMusic, IconFlame } from "@tabler/icons-react"
+import { IconSparkles, IconPlayerPlay, IconRefresh, IconMessage2, IconEye, IconLock, IconWorld, IconCoin, IconPlus, IconDots, IconLoader2, IconMusic, IconFlame, IconCheck } from "@tabler/icons-react"
 
 const API_BASE = "/api/zeno"
 
@@ -105,6 +105,14 @@ export default function Page() {
   const [lastUpdated, setLastUpdated] = useState("")
   const [token, setToken] = useState("")
   const [streak, setStreak] = useState<{ current?: number; longest?: number; lastActive?: string } | null>(null)
+  const [activeTab, setActiveTab] = useState("cover")
+  const [songTitle, setSongTitle] = useState("")
+  const [songStyle, setSongStyle] = useState("")
+  const [lyrics, setLyrics] = useState("[Verse 1]\n\n[Chorus]\n\n[Verse 2]")
+  const [isPublic, setIsPublic] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createStatus, setCreateStatus] = useState("")
+  const [createError, setCreateError] = useState("")
 
   const fetchHistory = useCallback(async () => {
     const storedToken = localStorage.getItem("zeno_token")
@@ -196,6 +204,113 @@ export default function Page() {
       .catch(() => {})
   }, [])
 
+  const createSong = async () => {
+    const storedToken = localStorage.getItem("zeno_token")
+    if (!storedToken) {
+      setCreateError("Not authenticated")
+      return
+    }
+
+    setCreating(true)
+    setCreateError("")
+    setCreateStatus("Submitting your song...")
+
+    try {
+      const body: Record<string, unknown> = {
+        title: songTitle || undefined,
+        style: songStyle || undefined,
+        visibility: isPublic ? "public" : "private",
+      }
+
+      if (activeTab === "lyrics") {
+        body.lyrics = lyrics
+        body.mode = "lyrics"
+      } else {
+        body.mode = "cover"
+      }
+
+      const res = await fetch(`${API_BASE}/music/generate-lyrics`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${storedToken}`,
+        },
+        body: JSON.stringify(body),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = data.message || data.error || `Failed to create song (${res.status})`
+        setCreateError(msg)
+        return
+      }
+
+      const taskId = data.taskId || data.task_id || data.id
+
+      if (taskId) {
+        setCreateStatus("Generating your song...")
+
+        // Poll lyrics-status until complete
+        const poll = async () => {
+          for (let i = 0; i < 60; i++) {
+            await new Promise((r) => setTimeout(r, 3000))
+
+            const statusRes = await fetch(
+              `${API_BASE}/music/lyrics-status?taskId=${taskId}`,
+              { headers: { Authorization: `Bearer ${storedToken}` } }
+            )
+
+            const statusData = await statusRes.json().catch(() => ({}))
+            const status = statusData.status || statusData.state
+
+            if (status === "completed" || status === "success" || status === "done") {
+              setCreateStatus("Song created successfully!")
+              setCreating(false)
+
+              // Update credits if returned
+              if (statusData.credits !== undefined) {
+                setCredits(statusData.credits)
+                localStorage.setItem("zeno_credits", String(statusData.credits))
+              }
+
+              // Refresh library
+              fetchHistory()
+              return
+            }
+
+            if (status === "failed" || status === "error") {
+              setCreateError(statusData.message || "Song generation failed")
+              setCreating(false)
+              return
+            }
+
+            setCreateStatus(`Generating... ${status || "processing"}`)
+          }
+
+          setCreateError("Song generation timed out. Please check your library later.")
+          setCreating(false)
+        }
+
+        poll()
+      } else {
+        // No taskId — might be synchronous
+        setCreateStatus("Song created successfully!")
+        setCreating(false)
+
+        if (data.credits !== undefined) {
+          setCredits(data.credits)
+          localStorage.setItem("zeno_credits", String(data.credits))
+        }
+
+        fetchHistory()
+      }
+    } catch {
+      setCreateError("Failed to connect to the server")
+      setCreating(false)
+    }
+  }
+
   const hasCredits = credits > 0
   return (
     <SidebarProvider
@@ -248,7 +363,7 @@ export default function Page() {
                     )}
 
                     {/* Tabs: Cover Audio / Lyrics AI */}
-                    <Tabs defaultValue="cover">
+                    <Tabs value={activeTab} onValueChange={setActiveTab}>
                       <TabsList className="grid w-full max-w-xs grid-cols-2">
                         <TabsTrigger value="cover">Cover Audio</TabsTrigger>
                         <TabsTrigger value="lyrics">Lyrics AI</TabsTrigger>
@@ -260,6 +375,8 @@ export default function Page() {
                           <label className="text-sm font-medium">Song Title <span className="text-muted-foreground">(Optional)</span></label>
                           <input
                             type="text"
+                            value={songTitle}
+                            onChange={(e) => setSongTitle(e.target.value)}
                             placeholder="e.g. Summer Nights"
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
                           />
@@ -270,6 +387,8 @@ export default function Page() {
                           <label className="text-sm font-medium">Style / Genre</label>
                           <input
                             type="text"
+                            value={songStyle}
+                            onChange={(e) => setSongStyle(e.target.value)}
                             placeholder="Afrobeats, Female Vocals, Upbeat, 100 BPM"
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
                           />
@@ -295,6 +414,8 @@ export default function Page() {
                           <label className="text-sm font-medium">Song Title <span className="text-muted-foreground">(Optional)</span></label>
                           <input
                             type="text"
+                            value={songTitle}
+                            onChange={(e) => setSongTitle(e.target.value)}
                             placeholder="e.g. Summer Nights"
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
                           />
@@ -305,6 +426,8 @@ export default function Page() {
                           <label className="text-sm font-medium">Style / Genre</label>
                           <input
                             type="text"
+                            value={songStyle}
+                            onChange={(e) => setSongStyle(e.target.value)}
                             placeholder="Afrobeats, Female Vocals, Upbeat, 100 BPM"
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
                           />
@@ -328,7 +451,8 @@ export default function Page() {
                           <label className="text-sm font-medium">Lyrics</label>
                           <textarea
                             rows={8}
-                            defaultValue={"[Verse 1]\n\n[Chorus]\n\n[Verse 2]"}
+                            value={lyrics}
+                            onChange={(e) => setLyrics(e.target.value)}
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
                           />
                         </div>
@@ -337,20 +461,50 @@ export default function Page() {
 
                     {/* Privacy toggle */}
                     <div className="flex items-center gap-3">
-                      <button className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-sm font-medium text-foreground">
+                      <button
+                        onClick={() => setIsPublic(false)}
+                        className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${!isPublic ? "border-primary/40 bg-primary/5 text-foreground" : "border-border/40 text-muted-foreground hover:text-foreground"}`}
+                      >
                         <IconLock className="h-4 w-4" />
                         Private
                       </button>
-                      <button className="flex items-center gap-2 rounded-lg border border-border/40 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                      <button
+                        onClick={() => setIsPublic(true)}
+                        className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${isPublic ? "border-primary/40 bg-primary/5 text-foreground" : "border-border/40 text-muted-foreground hover:text-foreground"}`}
+                      >
                         <IconWorld className="h-4 w-4" />
                         Public
                       </button>
                     </div>
 
+                    {/* Create status */}
+                    {createError && (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3">
+                        <p className="text-sm text-destructive">{createError}</p>
+                      </div>
+                    )}
+                    {createStatus && !createError && (
+                      <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+                        <p className="flex items-center gap-2 text-sm text-foreground">
+                          {creating ? <IconLoader2 className="h-4 w-4 animate-spin" /> : <IconCheck className="h-4 w-4 text-emerald-500" />}
+                          {createStatus}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Create button */}
-                    <Button className="w-full" size="lg" disabled={!hasCredits}>
-                      <IconSparkles className="mr-2 h-4 w-4" />
-                      {hasCredits ? "Create Song" : "No Credits — Top Up First"}
+                    <Button className="w-full" size="lg" disabled={!hasCredits || creating} onClick={createSong}>
+                      {creating ? (
+                        <>
+                          <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                          {createStatus || "Creating..."}
+                        </>
+                      ) : (
+                        <>
+                          <IconSparkles className="mr-2 h-4 w-4" />
+                          {hasCredits ? "Create Song" : "No Credits — Top Up First"}
+                        </>
+                      )}
                     </Button>
                   </CardContent>
                 </Card>

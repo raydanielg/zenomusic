@@ -6,16 +6,18 @@ import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 import { Card, CardContent } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
-import { IconPlaylist, IconRefresh, IconLoader2, IconDots, IconPlus, IconMusic } from "@tabler/icons-react"
+import { IconPlaylist, IconRefresh, IconLoader2, IconDots, IconPlus, IconMusic, IconHeart, IconEye, IconLock } from "@tabler/icons-react"
 
 const API_BASE = "/api/zeno"
 
 interface Playlist {
   id?: string
   _id?: string
+  uid?: string
   name?: string
   title?: string
   description?: string
+  visibility?: string
   coverArt?: string
   coverUrl?: string
   cover?: string
@@ -23,7 +25,13 @@ interface Playlist {
   image?: string
   imageData?: string
   songCount?: number
+  songIds?: string[]
   songs?: { id?: string; _id?: string; title?: string; name?: string; coverUrl?: string }[]
+  likeCount?: number
+  likes?: number
+  playCount?: number
+  plays?: number
+  hasLiked?: boolean
   createdAt?: string
   created_at?: string
   updatedAt?: string
@@ -31,7 +39,7 @@ interface Playlist {
 
 function getPlaylistCover(playlist: Playlist): string | null {
   const raw = playlist.coverArt || playlist.coverUrl || playlist.cover || playlist.coverImage || playlist.image || playlist.imageData
-  if (!raw) return null
+  if (!raw || raw === "") return null
   if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
   if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
     const mime = raw.startsWith("iVBORw0") ? "image/png" : raw.startsWith("UklGR") ? "image/webp" : "image/jpeg"
@@ -114,7 +122,9 @@ export default function PlaylistsPage() {
                     </div>
                     <div>
                       <h1 className="text-2xl font-bold tracking-tight">Playlists</h1>
-                      <p className="text-sm text-muted-foreground">Your curated collections</p>
+                      <p className="text-sm text-muted-foreground">
+                        {playlists.length > 0 ? `${playlists.length} playlists` : "Your curated collections"}
+                      </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -191,7 +201,22 @@ export default function PlaylistsPage() {
                         </div>
                         <CardContent className="p-3">
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{playlist.songCount || playlist.songs?.length || 0} songs</span>
+                            <span>{playlist.songIds?.length || playlist.songCount || playlist.songs?.length || 0} songs</span>
+                            <div className="flex items-center gap-3">
+                              {playlist.visibility && playlist.visibility !== "public" && (
+                                <span className="flex items-center gap-0.5">
+                                  <IconLock className="h-3 w-3" />
+                                </span>
+                              )}
+                              <span className="flex items-center gap-0.5">
+                                <IconHeart className={`h-3 w-3 ${playlist.hasLiked ? "fill-red-500 text-red-500" : ""}`} />
+                                {playlist.likeCount || playlist.likes || 0}
+                              </span>
+                              <span className="flex items-center gap-0.5">
+                                <IconEye className="h-3 w-3" />
+                                {playlist.playCount || playlist.plays || 0}
+                              </span>
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
