@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { toast } from "sonner"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 import { Card } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
-import { IconPlayerPlay, IconPlayerPause, IconRefresh, IconLoader2, IconCompass, IconDots, IconEye, IconMessage2, IconHeart, IconPlayerSkipForward, IconPlayerSkipBack, IconVolume, IconVolumeOff } from "@tabler/icons-react"
+import { IconPlayerPlay, IconPlayerPause, IconRefresh, IconLoader2, IconCompass, IconDots, IconEye, IconMessage2, IconHeart, IconPlayerSkipForward, IconPlayerSkipBack, IconVolume, IconVolumeOff, IconDownload, IconMusic } from "@tabler/icons-react"
 
 const API_BASE = "/api/zeno"
 
@@ -29,6 +30,14 @@ interface DiscoverSong {
   imageData?: string
   audioUrl?: string
   audio?: string
+  audioFile?: string
+  fileUrl?: string
+  url?: string
+  musicUrl?: string
+  songUrl?: string
+  mediaUrl?: string
+  downloadUrl?: string
+  streamUrl?: string
   comments?: number
   commentCount?: number
   plays?: number
@@ -41,6 +50,14 @@ interface DiscoverSong {
   created_at?: string
   updatedAt?: string
   author?: { name?: string; username?: string; avatar?: string; photoURL?: string }
+}
+
+function getAudioUrl(song: DiscoverSong): string | null {
+  const raw = song.audioUrl || song.audio || song.audioFile || song.fileUrl || song.url || song.musicUrl || song.songUrl || song.mediaUrl || song.downloadUrl || song.streamUrl
+  if (!raw) return null
+  if (raw.startsWith("http") || raw.startsWith("/") || raw.startsWith("data:")) return raw
+  if (raw.startsWith("blob:")) return raw
+  return raw
 }
 
 function getCoverUrl(song: DiscoverSong): string | null {
@@ -130,6 +147,7 @@ export default function DiscoverPage() {
       setSongs(list)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load discover")
+      toast.error(err instanceof Error ? err.message : "Failed to load discover")
     } finally {
       setLoading(false)
     }
@@ -166,9 +184,33 @@ export default function DiscoverPage() {
     }
   }, [volume, muted])
 
-  const playSong = (song: DiscoverSong) => {
-    const audioUrl = song.audioUrl || song.audio
-    if (!audioUrl) return
+  const playSong = async (song: DiscoverSong) => {
+    let audioUrl = getAudioUrl(song)
+
+    // If no audio URL in the song data, try fetching from the song detail endpoint
+    if (!audioUrl && (song.id || song._id)) {
+      const songId = song.id || song._id
+      try {
+        const token = localStorage.getItem("zeno_token")
+        const detailRes = await fetch(`${API_BASE}/music/${songId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (detailRes.ok) {
+          const detail = await detailRes.json()
+          audioUrl = detail.audioUrl || detail.audio || detail.fileUrl || detail.url || detail.musicUrl || detail.songUrl || detail.mediaUrl || detail.streamUrl || null
+          if (audioUrl) {
+            // Update the song object with the fetched audio URL
+            song = { ...song, audioUrl: audioUrl || undefined }
+            setSongs(prev => prev.map(s => (s.id === song.id || s._id === song._id) ? { ...s, audioUrl: audioUrl || undefined } : s))
+          }
+        }
+      } catch {}
+    }
+
+    if (!audioUrl) {
+      toast.error("Audio not available for this song")
+      return
+    }
 
     if (currentSong?.id === song.id || currentSong?._id === song._id) {
       // Toggle play/pause
@@ -374,6 +416,28 @@ export default function DiscoverPage() {
                           {/* Time ago */}
                           <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">{timeAgo(getSongDate(song))}</span>
 
+                          {/* Download */}
+                          {(() => {
+                            const dlUrl = getAudioUrl(song)
+                            return dlUrl ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const a = document.createElement("a")
+                                  a.href = dlUrl
+                                  a.download = `${getSongTitle(song)}.mp3`
+                                  a.target = "_blank"
+                                  a.click()
+                                  toast.success("Download started", { description: getSongTitle(song) })
+                                }}
+                                className="ml-1 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                                title="Download"
+                              >
+                                <IconDownload className="h-4 w-4" />
+                              </button>
+                            ) : null
+                          })()}
+
                           {/* Dots menu */}
                           <button
                             onClick={(e) => e.stopPropagation()}
@@ -460,6 +524,24 @@ export default function DiscoverPage() {
                   >
                     <IconPlayerSkipForward className="h-4 w-4 fill-current" />
                   </button>
+                  {currentSong && getAudioUrl(currentSong) && (
+                    <button
+                      onClick={() => {
+                        const dlUrl = getAudioUrl(currentSong)
+                        if (!dlUrl) return
+                        const a = document.createElement("a")
+                        a.href = dlUrl
+                        a.download = `${getSongTitle(currentSong)}.mp3`
+                        a.target = "_blank"
+                        a.click()
+                        toast.success("Download started", { description: getSongTitle(currentSong) })
+                      }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                      title="Download"
+                    >
+                      <IconDownload className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Time + Volume */}

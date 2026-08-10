@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { toast } from "sonner"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
@@ -81,22 +82,42 @@ export default function ProfilePage() {
     setError("")
 
     try {
-      const res = await fetch(`${API_BASE}/users/${userId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-      })
+      // Try multiple profile endpoints since API structure may vary
+      const endpoints = [
+        `${API_BASE}/users/profile`,
+        `${API_BASE}/auth/me`,
+        `${API_BASE}/users/${userId}`,
+      ]
 
-      if (!res.ok) {
+      let res: Response | null = null
+      let data: any = null
+
+      for (const endpoint of endpoints) {
+        res = await fetch(endpoint, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        })
+        if (res.ok) {
+          data = await res.json()
+          break
+        }
         if (res.status === 401) {
           window.location.href = "/login"
           return
         }
-        throw new Error(`Failed to fetch profile (${res.status})`)
       }
 
-      const data = await res.json()
+      if (!data) {
+        // All endpoints failed — use localStorage data as fallback
+        data = {
+          username: localStorage.getItem("zeno_username") || userId,
+          credits: parseInt(localStorage.getItem("zeno_credits") || "0"),
+          photoURL: localStorage.getItem("zeno_avatar") || undefined,
+          displayName: localStorage.getItem("zeno_display_name") || undefined,
+        }
+      }
       // Merge with localStorage data as fallback
       const merged = {
         ...data,
@@ -108,6 +129,7 @@ export default function ProfilePage() {
       setProfile(merged)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load profile")
+      toast.error(err instanceof Error ? err.message : "Failed to load profile")
     } finally {
       setLoading(false)
     }

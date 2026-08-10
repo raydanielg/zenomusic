@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { toast } from "sonner"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
@@ -92,6 +93,7 @@ export default function PlaylistsPage() {
       setPlaylists(list)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load playlists")
+      toast.error(err instanceof Error ? err.message : "Failed to load playlists")
     } finally {
       setLoading(false)
     }

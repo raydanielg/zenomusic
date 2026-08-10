@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google"
 import "@workspace/ui/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@workspace/ui/components/tooltip"
+import { Toaster } from "@workspace/ui/components/sonner"
 import { cn } from "@workspace/ui/lib/utils";
 
 const inter = Inter({subsets:['latin'],variable:'--font-sans'})
@@ -25,7 +26,10 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
+          <TooltipProvider>
+            {children}
+            <Toaster position="top-right" richColors closeButton />
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

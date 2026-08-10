@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { toast } from "sonner"
 import { cn } from "@workspace/ui/lib/utils"
 import { Button } from "@workspace/ui/components/button"
 import {
@@ -75,8 +76,10 @@ export function LoginForm({
       }
 
       setStep("otp")
+      toast.success("OTP sent", { description: `Code sent to +${fullPhone}` })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong")
+      toast.error(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
     }
@@ -155,11 +158,13 @@ export function LoginForm({
       }
 
       setSuccess(true)
+      toast.success("Welcome to ZenoMusic!", { description: "Redirecting to dashboard..." })
       setTimeout(() => {
         window.location.href = "/dashboard"
       }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong")
+      toast.error(err instanceof Error ? err.message : "Something went wrong")
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { toast } from "sonner"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
@@ -214,6 +215,7 @@ export default function Page() {
     setCreating(true)
     setCreateError("")
     setCreateStatus("Submitting your song...")
+    const toastId = toast.loading("Creating your song...")
 
     try {
       const body: Record<string, unknown> = {
@@ -243,6 +245,7 @@ export default function Page() {
       if (!res.ok) {
         const msg = data.message || data.error || `Failed to create song (${res.status})`
         setCreateError(msg)
+        toast.error(msg, { id: toastId })
         return
       }
 
@@ -250,6 +253,7 @@ export default function Page() {
 
       if (taskId) {
         setCreateStatus("Generating your song...")
+        toast.loading("Generating your song...", { id: toastId, description: "This may take a minute" })
 
         // Poll lyrics-status until complete
         const poll = async () => {
@@ -267,6 +271,7 @@ export default function Page() {
             if (status === "completed" || status === "success" || status === "done") {
               setCreateStatus("Song created successfully!")
               setCreating(false)
+              toast.success("Song created successfully!", { id: toastId, description: getSongTitle({ title: songTitle } as any) })
 
               // Update credits if returned
               if (statusData.credits !== undefined) {
@@ -282,6 +287,7 @@ export default function Page() {
             if (status === "failed" || status === "error") {
               setCreateError(statusData.message || "Song generation failed")
               setCreating(false)
+              toast.error(statusData.message || "Song generation failed", { id: toastId })
               return
             }
 
@@ -290,6 +296,7 @@ export default function Page() {
 
           setCreateError("Song generation timed out. Please check your library later.")
           setCreating(false)
+          toast.error("Song generation timed out", { id: toastId, description: "Check your library later" })
         }
 
         poll()
@@ -297,6 +304,7 @@ export default function Page() {
         // No taskId — might be synchronous
         setCreateStatus("Song created successfully!")
         setCreating(false)
+        toast.success("Song created successfully!", { id: toastId })
 
         if (data.credits !== undefined) {
           setCredits(data.credits)
@@ -308,6 +316,7 @@ export default function Page() {
     } catch {
       setCreateError("Failed to connect to the server")
       setCreating(false)
+      toast.error("Failed to connect to the server")
     }
   }
 
