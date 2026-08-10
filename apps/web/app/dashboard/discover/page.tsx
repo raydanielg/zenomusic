@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 import { Card } from "@workspace/ui/components/card"
 import { Button } from "@workspace/ui/components/button"
-import { IconPlayerPlay, IconRefresh, IconLoader2, IconCompass, IconDots, IconEye, IconMessage2, IconHeart } from "@tabler/icons-react"
+import { IconPlayerPlay, IconPlayerPause, IconRefresh, IconLoader2, IconCompass, IconDots, IconEye, IconMessage2, IconHeart, IconPlayerSkipForward, IconPlayerSkipBack, IconVolume, IconVolumeOff } from "@tabler/icons-react"
 
 const API_BASE = "/api/zeno"
 
@@ -91,6 +91,13 @@ export default function DiscoverPage() {
   const [songs, setSongs] = useState<DiscoverSong[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [currentSong, setCurrentSong] = useState<DiscoverSong | null>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [volume, setVolume] = useState(1)
+  const [muted, setMuted] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const fetchDiscover = useCallback(async () => {
     const token = localStorage.getItem("zeno_token")
@@ -131,6 +138,99 @@ export default function DiscoverPage() {
   useEffect(() => {
     fetchDiscover()
   }, [fetchDiscover])
+
+  // Audio event listeners
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    const onTimeUpdate = () => setProgress(audio.currentTime)
+    const onLoadedMetadata = () => setDuration(audio.duration)
+    const onEnded = () => handleNext()
+
+    audio.addEventListener("timeupdate", onTimeUpdate)
+    audio.addEventListener("loadedmetadata", onLoadedMetadata)
+    audio.addEventListener("ended", onEnded)
+
+    return () => {
+      audio.removeEventListener("timeupdate", onTimeUpdate)
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata)
+      audio.removeEventListener("ended", onEnded)
+    }
+  }, [currentSong])
+
+  // Update volume
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = muted ? 0 : volume
+    }
+  }, [volume, muted])
+
+  const playSong = (song: DiscoverSong) => {
+    const audioUrl = song.audioUrl || song.audio
+    if (!audioUrl) return
+
+    if (currentSong?.id === song.id || currentSong?._id === song._id) {
+      // Toggle play/pause
+      if (isPlaying) {
+        audioRef.current?.pause()
+        setIsPlaying(false)
+      } else {
+        audioRef.current?.play()
+        setIsPlaying(true)
+      }
+      return
+    }
+
+    setCurrentSong(song)
+    setProgress(0)
+    setDuration(0)
+
+    // Play after src is set
+    setTimeout(() => {
+      audioRef.current?.play()
+      setIsPlaying(true)
+    }, 100)
+  }
+
+  const handleNext = () => {
+    if (!currentSong) return
+    const currentIndex = songs.findIndex((s) => (s.id || s._id) === (currentSong.id || currentSong._id))
+    if (currentIndex < songs.length - 1) {
+      const next = songs[currentIndex + 1]
+      if (next) playSong(next)
+    } else {
+      setIsPlaying(false)
+      setProgress(0)
+    }
+  }
+
+  const handlePrev = () => {
+    if (!currentSong) return
+    const currentIndex = songs.findIndex((s) => (s.id || s._id) === (currentSong.id || currentSong._id))
+    if (currentIndex > 0) {
+      const prev = songs[currentIndex - 1]
+      if (prev) playSong(prev)
+    } else {
+      setProgress(0)
+      if (audioRef.current) audioRef.current.currentTime = 0
+    }
+  }
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = (e.clientX - rect.left) / rect.width
+    audioRef.current.currentTime = ratio * duration
+    setProgress(ratio * duration)
+  }
+
+  const formatTime = (seconds: number) => {
+    if (!seconds || isNaN(seconds)) return "0:00"
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
 
   return (
     <SidebarProvider
@@ -192,58 +292,96 @@ export default function DiscoverPage() {
                 )}
 
                 {!loading && !error && songs.length > 0 && (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  <div className="space-y-2">
+                    {/* List header */}
+                    <div className="hidden items-center gap-4 rounded-lg border border-border/40 bg-muted/30 px-4 py-2 text-xs font-medium text-muted-foreground sm:flex">
+                      <span className="w-6 text-center">#</span>
+                      <span className="flex-1">Title</span>
+                      <span className="hidden w-32 md:block">Genre</span>
+                      <span className="hidden w-24 sm:block">Plays</span>
+                      <span className="hidden w-20 sm:block">Likes</span>
+                      <span className="w-16 text-right">Time</span>
+                    </div>
+
                     {songs.map((song, i) => {
                       const cover = getCoverUrl(song)
                       const authorAvatar = song.author?.avatar || song.author?.photoURL
+                      const songId = getSongId(song, i)
+                      const isActive = currentSong && (currentSong.id === song.id || currentSong._id === song._id)
+                      const hasAudio = song.audioUrl || song.audio
                       return (
-                      <Card key={getSongId(song, i)} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
-                        <div className="relative h-36 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
-                          {cover && (
-                            <img src={cover} alt={getSongTitle(song)} className="absolute inset-0 h-full w-full object-cover" />
-                          )}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition-all group-hover:scale-110 group-hover:opacity-100">
-                              <IconPlayerPlay className="h-5 w-5 fill-white text-white" />
+                        <div
+                          key={songId}
+                          onClick={() => hasAudio && playSong(song)}
+                          className={`group flex items-center gap-4 rounded-lg border px-4 py-3 transition-all ${isActive ? "border-primary/40 bg-primary/5" : "border-border/40 hover:border-border/60 hover:bg-muted/20"} ${hasAudio ? "cursor-pointer" : "cursor-default opacity-60"}`}
+                        >
+                          {/* Index / Play button */}
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center">
+                            {isActive && isPlaying ? (
+                              <div className="flex items-end gap-0.5">
+                                <span className="h-3 w-0.5 animate-pulse rounded-full bg-primary" style={{ animationDelay: "0ms" }} />
+                                <span className="h-4 w-0.5 animate-pulse rounded-full bg-primary" style={{ animationDelay: "150ms" }} />
+                                <span className="h-2 w-0.5 animate-pulse rounded-full bg-primary" style={{ animationDelay: "300ms" }} />
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm text-muted-foreground group-hover:hidden">{i + 1}</span>
+                                {hasAudio && (
+                                  <IconPlayerPlay className="hidden h-4 w-4 fill-current text-foreground group-hover:block" />
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Cover + Title + Author */}
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+                              {cover && (
+                                <img src={cover} alt={getSongTitle(song)} className="h-full w-full object-cover" />
+                              )}
+                              {!cover && (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <IconCompass className="h-4 w-4 text-white/50" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className={`truncate text-sm font-medium ${isActive ? "text-primary" : ""}`}>{getSongTitle(song)}</h3>
+                              <div className="flex items-center gap-1.5">
+                                {authorAvatar && (
+                                  <img src={authorAvatar} alt={song.author?.name || song.author?.username} className="h-3 w-3 rounded-full" />
+                                )}
+                                <span className="truncate text-xs text-muted-foreground">{song.author?.name || song.author?.username || "Unknown"}</span>
+                              </div>
                             </div>
                           </div>
-                          <div className="absolute top-2 right-2">
-                            <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
-                              {song.status || "completed"}
-                            </span>
-                          </div>
-                          {authorAvatar && (
-                            <div className="absolute bottom-2 left-2 flex items-center gap-1.5">
-                              <img src={authorAvatar} alt={song.author?.name || song.author?.username} className="h-5 w-5 rounded-full border border-white/30" />
-                              <span className="text-[10px] font-medium text-white">{song.author?.name || song.author?.username}</span>
-                            </div>
-                          )}
+
+                          {/* Genre */}
+                          <span className="hidden w-32 shrink-0 truncate text-xs text-muted-foreground md:block">{getSongGenre(song)}</span>
+
+                          {/* Plays */}
+                          <span className="hidden w-24 shrink-0 items-center gap-1 text-xs text-muted-foreground sm:flex">
+                            <IconEye className="h-3 w-3" />
+                            {song.plays || song.playCount || song.totalPlays || song.views || 0}
+                          </span>
+
+                          {/* Likes */}
+                          <span className="hidden w-20 shrink-0 items-center gap-1 text-xs text-muted-foreground sm:flex">
+                            <IconHeart className="h-3 w-3" />
+                            {song.likes || song.likeCount || 0}
+                          </span>
+
+                          {/* Time ago */}
+                          <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">{timeAgo(getSongDate(song))}</span>
+
+                          {/* Dots menu */}
+                          <button
+                            onClick={(e) => e.stopPropagation()}
+                            className="ml-2 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                          >
+                            <IconDots className="h-4 w-4" />
+                          </button>
                         </div>
-                        <div className="p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h3 className="truncate text-sm font-medium">{getSongTitle(song)}</h3>
-                            <button className="text-muted-foreground hover:text-foreground">
-                              <IconDots className="h-4 w-4" />
-                            </button>
-                          </div>
-                          <p className="truncate text-xs text-muted-foreground">{getSongGenre(song)}</p>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <IconHeart className="h-3 w-3" />
-                              {song.likes || song.likeCount || 0}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <IconMessage2 className="h-3 w-3" />
-                              {song.comments || song.commentCount || 0}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <IconEye className="h-3 w-3" />
-                              {song.plays || song.playCount || song.totalPlays || song.views || 0}
-                            </span>
-                            <span className="ml-auto text-[10px]">{timeAgo(getSongDate(song))}</span>
-                          </div>
-                        </div>
-                      </Card>
                       )
                     })}
                   </div>
@@ -251,6 +389,110 @@ export default function DiscoverPage() {
               </div>
             </div>
           </div>
+
+          {/* Audio element (hidden) */}
+          <audio ref={audioRef} src={currentSong?.audioUrl || currentSong?.audio || undefined} />
+
+          {/* Bottom Player Bar */}
+          {currentSong && (
+            <div className="sticky bottom-0 z-50 border-t border-border/60 bg-background/95 backdrop-blur-lg">
+              {/* Progress bar */}
+              <div
+                onClick={handleSeek}
+                className="group relative h-1.5 cursor-pointer bg-muted"
+              >
+                <div
+                  className="absolute inset-y-0 left-0 bg-primary transition-all"
+                  style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}
+                />
+                <div
+                  className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary opacity-0 shadow-md transition-opacity group-hover:opacity-100"
+                  style={{ left: `${duration ? (progress / duration) * 100 : 0}%` }}
+                />
+              </div>
+
+              {/* Player controls */}
+              <div className="flex items-center gap-4 px-4 py-3">
+                {/* Current song info */}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500">
+                    {getCoverUrl(currentSong) && (
+                      <img src={getCoverUrl(currentSong)!} alt={getSongTitle(currentSong)} className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="truncate text-sm font-medium">{getSongTitle(currentSong)}</h4>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {currentSong.author?.name || currentSong.author?.username || "Unknown"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Center controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrev}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <IconPlayerSkipBack className="h-4 w-4 fill-current" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (isPlaying) {
+                        audioRef.current?.pause()
+                        setIsPlaying(false)
+                      } else {
+                        audioRef.current?.play()
+                        setIsPlaying(true)
+                      }
+                    }}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105"
+                  >
+                    {isPlaying ? (
+                      <IconPlayerPause className="h-5 w-5 fill-current" />
+                    ) : (
+                      <IconPlayerPlay className="h-5 w-5 fill-current" />
+                    )}
+                  </button>
+                  <button
+                    onClick={handleNext}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <IconPlayerSkipForward className="h-4 w-4 fill-current" />
+                  </button>
+                </div>
+
+                {/* Time + Volume */}
+                <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+                  <span className="hidden text-xs text-muted-foreground sm:block">{formatTime(progress)} / {formatTime(duration)}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMuted(!muted)}
+                      className="text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      {muted || volume === 0 ? (
+                        <IconVolumeOff className="h-4 w-4" />
+                      ) : (
+                        <IconVolume className="h-4 w-4" />
+                      )}
+                    </button>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={muted ? 0 : volume}
+                      onChange={(e) => {
+                        setVolume(parseFloat(e.target.value))
+                        setMuted(false)
+                      }}
+                      className="h-1 w-20 cursor-pointer appearance-none rounded-full bg-muted accent-primary lg:w-28"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </SidebarInset>
     </SidebarProvider>
