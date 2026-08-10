@@ -11,6 +11,9 @@ import {
   IconPalette, IconCircleCheck, IconChartDots, IconClock,
   IconStars, IconHeart, IconBookmark, IconBrandInstagram,
 } from "@tabler/icons-react"
+import { TypewriterText } from "@/components/typewriter-text"
+import { ThemeToggle } from "@/components/theme-toggle"
+import { MobileNav } from "@/components/mobile-nav"
 
 const navLinks = [
   { label: "How it works", href: "#how" },
@@ -117,13 +120,17 @@ export default function Page() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-              Sign in
-            </Link>
-            <Link href="/login" className={buttonVariants({ size: "sm" })}>
-              Get started free
-              <IconChevronRight className="ml-1 h-3.5 w-3.5" />
-            </Link>
+            <ThemeToggle />
+            <div className="hidden items-center gap-2 sm:flex">
+              <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Sign in
+              </Link>
+              <Link href="/login" className={buttonVariants({ size: "sm" })}>
+                Get started free
+                <IconChevronRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <MobileNav />
           </div>
         </div>
       </nav>
@@ -141,27 +148,21 @@ export default function Page() {
 
         <h1 className="max-w-4xl animate-fade-in-up text-5xl font-bold tracking-tight delay-100 md:text-7xl">
           Create music with
-          <span className="block bg-gradient-to-r from-primary via-violet-500 to-blue-500 bg-clip-text text-transparent animate-gradient-shift md:text-8xl">
-            just a prompt.
-          </span>
+          <TypewriterText />
         </h1>
 
         <p className="mt-8 max-w-xl animate-fade-in-up text-lg text-muted-foreground delay-200 md:text-xl">
           ZenoMusic turns your words into original songs. Type what you feel, pick your style, and let AI do the rest — a finished track in seconds.
         </p>
 
-        <div className="mt-10 flex animate-fade-in-up flex-col items-center gap-3 delay-300 sm:flex-row">
-          <Link href="/login" className={buttonVariants({ size: "lg", className: "w-full sm:w-auto" })}>
-            <IconSparkles className="mr-1 h-4 w-4" />
+        <div className="mt-10 animate-fade-in-up delay-300">
+          <Link href="/login" className={buttonVariants({ size: "lg" })}>
+            <IconSparkles className="mr-1.5 h-4 w-4" />
             Get started free
-          </Link>
-          <Link href="/login" className={buttonVariants({ variant: "outline", size: "lg", className: "w-full sm:w-auto" })}>
-            Sign in
-            <IconChevronRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
 
-        {/* Prompt demo card with waveform */}
+        {/* Prompt input card */}
         <div className="mt-16 w-full max-w-2xl animate-scale-in delay-500">
           <Card className="glass overflow-hidden border-border/30 shadow-2xl">
             <div className="flex items-center gap-2 border-b border-border/20 px-4 py-3">
@@ -171,32 +172,35 @@ export default function Page() {
                 <div className="h-3 w-3 rounded-full bg-green-400/50" />
               </div>
               <span className="ml-2 text-xs text-muted-foreground">zeno · new track</span>
-              <div className="ml-auto flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                <span className="text-xs text-muted-foreground">generating...</span>
-              </div>
             </div>
             <div className="p-6">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 animate-glow-pulse">
-                  <IconChevronRight className="h-5 w-5 text-primary" />
+              {/* Input row */}
+              <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 p-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <IconWand className="h-5 w-5 text-primary" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm text-foreground/90">
-                    rainy lo-fi beat for late-night studying, soft piano and vinyl warmth
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <Badge variant="secondary" className="text-xs">
-                      <IconMusic className="mr-1 h-3 w-3" />
-                      style: lo-fi
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      <IconClock className="mr-1 h-3 w-3" />
-                      2:34
-                    </Badge>
-                  </div>
-                </div>
+                <input
+                  type="text"
+                  placeholder="Describe your song... e.g. rainy lo-fi for late-night studying"
+                  className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 outline-none"
+                  readOnly
+                />
+                <Link href="/login" className={buttonVariants({ size: "sm" })}>
+                  <IconSparkles className="mr-1 h-3.5 w-3.5" />
+                  Generate
+                </Link>
               </div>
+
+              {/* Style tags */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">Popular:</span>
+                {["Lo-fi", "Afrobeats", "Bongo Flava", "Pop", "Amapiano"].map((tag) => (
+                  <span key={tag} className="rounded-full border border-border/40 px-3 py-1 text-xs text-muted-foreground">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
               {/* Animated waveform */}
               <div className="mt-5 flex h-16 items-center justify-center rounded-lg bg-primary/5 text-primary/40">
                 <Waveform bars={50} className="h-12 w-full px-2" />
@@ -205,31 +209,19 @@ export default function Page() {
           </Card>
         </div>
 
-        {/* Feature bullets */}
-        <div className="mt-12 flex animate-fade-in-up flex-wrap items-center justify-center gap-x-8 gap-y-3 delay-700">
-          {["No music experience needed", "Original, royalty-ready tracks", "Ready in seconds"].map((item) => (
-            <div key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
-              <IconCircleCheck className="h-4 w-4 text-primary" />
-              {item}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Stats bar */}
-      <section className="relative z-10 mx-auto max-w-7xl px-6 py-16">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {stats.map((stat, i) => (
-            <div
-              key={stat.label}
-              className={`glass animate-count-up rounded-2xl p-6 text-center delay-${(i + 1) * 100}`}
-            >
-              <div className="bg-gradient-to-r from-primary to-violet-500 bg-clip-text text-3xl font-bold text-transparent md:text-4xl">
-                {stat.value}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground md:text-sm">{stat.label}</p>
-            </div>
-          ))}
+        {/* Feature bullets marquee */}
+        <div className="mt-12 overflow-hidden">
+          <div className="flex animate-marquee gap-3 whitespace-nowrap">
+            {[...["No music experience needed", "Original, royalty-ready tracks", "Ready in seconds", "Any genre, any mood", "Download and share"], ...["No music experience needed", "Original, royalty-ready tracks", "Ready in seconds", "Any genre, any mood", "Download and share"]].map((item, i) => (
+              <span
+                key={i}
+                className="glass inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-muted-foreground"
+              >
+                <IconCircleCheck className="h-4 w-4 text-primary" />
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -263,21 +255,19 @@ export default function Page() {
 
         <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-3">
           {steps.map((step, i) => (
-            <div
-              key={step.num}
-              className={`group relative animate-slide-in-${i === 0 ? "left" : i === 2 ? "right" : "up"} delay-${(i + 1) * 100}`}
-            >
-              <Card className="glass h-full overflow-hidden p-8 transition-all duration-300 hover:scale-[1.03] hover:border-primary/30">
-                <div className="absolute -right-4 -top-4 text-8xl font-bold text-primary/5 transition-colors group-hover:text-primary/10">
-                  {step.num}
-                </div>
-                <div className="relative">
-                  <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20">
-                    <step.icon className="h-7 w-7 text-primary" />
+            <div key={step.num} className="relative">
+              <Card className="glass h-full overflow-hidden p-8">
+                {/* Step number badge */}
+                <div className="mb-5 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground text-sm font-bold">
+                    {step.num}
                   </div>
-                  <h3 className="text-xl font-semibold">{step.title}</h3>
-                  <p className="mt-3 text-sm text-muted-foreground">{step.desc}</p>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                    <step.icon className="h-6 w-6 text-primary" />
+                  </div>
                 </div>
+                <h3 className="text-xl font-semibold">{step.title}</h3>
+                <p className="mt-3 text-sm text-muted-foreground">{step.desc}</p>
               </Card>
               {/* Connecting line */}
               {i < 2 && (
@@ -302,20 +292,16 @@ export default function Page() {
         </div>
 
         <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {features.map((feature, i) => (
+          {features.map((feature) => (
             <Card
               key={feature.title}
-              className={`group glass animate-fade-in-up delay-${(i + 1) * 100} p-8 transition-all duration-300 hover:scale-[1.02] hover:border-primary/30`}
+              className="glass flex flex-col p-7"
             >
-              <div className="flex items-start gap-5">
-                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${feature.gradient} p-3`}>
-                  <feature.icon className="h-7 w-7 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold">{feature.title}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{feature.desc}</p>
-                </div>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                <feature.icon className="h-6 w-6 text-primary" />
               </div>
+              <h3 className="text-lg font-semibold">{feature.title}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{feature.desc}</p>
             </Card>
           ))}
         </div>
@@ -438,36 +424,30 @@ export default function Page() {
         </div>
 
         <div className="mt-16 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {pricingPlans.map((plan, i) => (
+          {pricingPlans.map((plan) => (
             <Card
               key={plan.name}
-              className={`glass relative flex animate-fade-in-up flex-col p-6 delay-${(i + 1) * 100} transition-all duration-300 hover:scale-[1.03] ${
-                plan.popular ? "border-primary/50 ring-2 ring-primary/20" : ""
-              }`}
+              className="glass flex flex-col items-center p-7 text-center min-h-[400px]"
             >
-              {plan.popular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="text-xs animate-glow-pulse">Best value</Badge>
-                </div>
-              )}
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+                <IconMusic className="h-7 w-7 text-primary" />
+              </div>
               <h3 className="text-lg font-semibold">{plan.name}</h3>
-              <div className="mt-3 flex items-baseline gap-1">
+              <div className="mt-3 flex items-baseline gap-1.5">
                 <span className="text-sm text-muted-foreground">TZS</span>
                 <span className="text-3xl font-bold">{plan.price}</span>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{plan.credits}</p>
-              <Separator className="my-4" />
-              <ul className="flex-1 space-y-3">
+              <p className="mt-2 text-sm text-muted-foreground">{plan.credits}</p>
+              <Separator className="my-5" />
+              <ul className="flex-1 space-y-3 text-left">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2 text-sm">
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                      <IconCheck className="h-3 w-3 text-primary" />
-                    </div>
+                  <li key={f} className="flex items-center gap-2.5 text-sm">
+                    <IconCheck className="h-4 w-4 shrink-0 text-primary" />
                     {f}
                   </li>
                 ))}
               </ul>
-              <Button className="mt-6 w-full" variant={plan.popular ? "default" : "outline"}>
+              <Button className="mt-6 w-full">
                 Buy credits
               </Button>
             </Card>
@@ -475,15 +455,13 @@ export default function Page() {
         </div>
 
         {/* Payment methods */}
-        <div className="mt-12 flex flex-col items-center gap-3">
-          <span className="text-xs text-muted-foreground">Pay with</span>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {paymentMethods.map((method) => (
-              <span key={method} className="glass rounded-full px-4 py-2 text-xs font-medium">
-                {method}
-              </span>
-            ))}
-          </div>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+          <span className="text-sm text-muted-foreground">Pay with:</span>
+          {paymentMethods.map((method) => (
+            <span key={method} className="glass rounded-lg px-3.5 py-1.5 text-sm font-medium text-muted-foreground">
+              {method}
+            </span>
+          ))}
         </div>
       </section>
 
@@ -528,19 +506,31 @@ export default function Page() {
           <p className="mt-4 text-muted-foreground">Questions, answered.</p>
         </div>
 
-        <div className="mt-12">
-          <Accordion>
+        <div className="mt-12 space-y-4">
+          <Accordion className="border-border/30">
             {faqs.map((faq, i) => (
-              <AccordionItem key={i} className="glass">
-                <AccordionTrigger className="px-4 text-sm font-medium">
+              <AccordionItem key={i} className="glass rounded-xl border-border/30 not-last:border-b">
+                <AccordionTrigger className="px-6 py-5 text-base font-medium">
                   {faq.q}
                 </AccordionTrigger>
-                <AccordionContent className="px-4 text-muted-foreground">
+                <AccordionContent className="px-6 text-sm text-muted-foreground">
                   {faq.a}
                 </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
+
+          {/* Contact CTA */}
+          <div className="glass mt-6 flex flex-col items-center justify-between gap-4 rounded-xl p-6 sm:flex-row">
+            <div>
+              <p className="text-sm font-medium">Still have questions?</p>
+              <p className="mt-1 text-sm text-muted-foreground">We&apos;re here to help. Reach out and we&apos;ll get back to you.</p>
+            </div>
+            <Link href="/login" className={buttonVariants({ size: "sm" })}>
+              Contact us
+              <IconChevronRight className="ml-1 h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
       </section>
 
