@@ -49,9 +49,12 @@ function getAvatar(profile: UserProfile | null): string {
   if (!profile) return "/avatars/shadcn.jpg"
   const raw = profile.photoURL || profile.avatar || profile.image || profile.imageData
   if (!raw) {
-    // Check localStorage for avatar stored during login
-    const stored = localStorage.getItem("zeno_avatar")
-    return stored || "/avatars/shadcn.jpg"
+    // Check localStorage for avatar stored during login (client-side only)
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("zeno_avatar")
+      return stored || "/avatars/shadcn.jpg"
+    }
+    return "/avatars/shadcn.jpg"
   }
   if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
   if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
@@ -114,7 +117,7 @@ export default function ProfilePage() {
     fetchProfile()
   }, [fetchProfile])
 
-  const displayName = profile?.displayName || profile?.name || profile?.username || (localStorage.getItem("zeno_username") ? `@${localStorage.getItem("zeno_username")}` : "Zeno User")
+  const displayName = profile?.displayName || profile?.name || profile?.username || (typeof window !== "undefined" && localStorage.getItem("zeno_username") ? `@${localStorage.getItem("zeno_username")}` : "Zeno User")
   const avatar = getAvatar(profile)
   const stats = profile?.stats || {}
   const bio = profile?.bio || profile?.about
