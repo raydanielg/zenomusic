@@ -145,7 +145,7 @@ export default function Page() {
       }
 
       const data = await res.json()
-      const history = Array.isArray(data) ? data : data.history || data.songs || data.data || data.items || []
+      const history = Array.isArray(data) ? data : data.history || data.songs || data.tracks || data.items || data.data || data.results || []
       setSongs(history)
       setLastUpdated(new Date().toLocaleTimeString())
 
