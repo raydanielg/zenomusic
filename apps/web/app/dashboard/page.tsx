@@ -1,25 +1,153 @@
+"use client"
+
+import { useState, useEffect, useCallback } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
-import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { SectionCards } from "@/components/section-cards"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@workspace/ui/components/card"
-import { Button, buttonVariants } from "@workspace/ui/components/button"
-import { Badge } from "@workspace/ui/components/badge"
-import { IconSparkles, IconWand, IconPlayerPlay, IconDownload, IconHeart, IconClock, IconMusic, IconDots } from "@tabler/icons-react"
+import { Card, CardContent } from "@workspace/ui/components/card"
+import { Button } from "@workspace/ui/components/button"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@workspace/ui/components/tabs"
+import { IconSparkles, IconPlayerPlay, IconRefresh, IconMessage2, IconEye, IconLock, IconWorld, IconCoin, IconPlus, IconDots, IconLoader2, IconMusic } from "@tabler/icons-react"
 
-const recentTracks = [
-  { title: "Midnight in Dar", genre: "Bongo Flava", duration: "3:24", color: "from-orange-500 to-red-500", date: "2 hours ago" },
-  { title: "Rainy Lo-fi Nights", genre: "Lo-fi", duration: "2:48", color: "from-blue-500 to-indigo-500", date: "Yesterday" },
-  { title: "Sahara Dreams", genre: "Afrobeats", duration: "3:12", color: "from-amber-500 to-yellow-500", date: "2 days ago" },
-  { title: "Voltage", genre: "Amapiano", duration: "4:01", color: "from-violet-500 to-purple-500", date: "3 days ago" },
-  { title: "Ocean Drive", genre: "Synthwave", duration: "3:45", color: "from-cyan-500 to-blue-500", date: "5 days ago" },
-  { title: "Golden Hour", genre: "Lo-fi", duration: "2:30", color: "from-pink-500 to-rose-500", date: "1 week ago" },
+const API_BASE = "https://zenomusic.io/api"
+
+const genreTags = [
+  "Afrobeats", "Amapiano", "Pop", "R&B", "Hip Hop", "Gospel",
+  "Reggae", "Dancehall", "Soul", "Drill", "Bongo Flava", "Taarab",
 ]
 
-const genres = ["Lo-fi", "Afrobeats", "Bongo Flava", "Pop", "Amapiano", "Hip-Hop", "Cinematic", "R&B"]
+interface Song {
+  id?: string
+  _id?: string
+  title?: string
+  name?: string
+  status?: string
+  visibility?: string
+  isPublic?: boolean
+  genre?: string
+  style?: string
+  tags?: string[]
+  coverUrl?: string
+  cover?: string
+  coverImage?: string
+  image?: string
+  imageData?: string
+  audioUrl?: string
+  audio?: string
+  comments?: number
+  commentCount?: number
+  plays?: number
+  playCount?: number
+  views?: number
+  likes?: number
+  likeCount?: number
+  createdAt?: string
+  created_at?: string
+  updatedAt?: string
+}
+
+function getCoverUrl(song: Song): string | null {
+  const raw = song.coverUrl || song.cover || song.coverImage || song.image || song.imageData
+  if (!raw) return null
+  if (raw.startsWith("data:") || raw.startsWith("http") || raw.startsWith("/")) return raw
+  if (raw.startsWith("iVBORw0") || raw.startsWith("/9j/") || raw.startsWith("UklGR")) {
+    const mime = raw.startsWith("iVBORw0") ? "image/png" : raw.startsWith("UklGR") ? "image/webp" : "image/jpeg"
+    return `data:${mime};base64,${raw}`
+  }
+  return raw
+}
+
+function getSongTitle(song: Song): string {
+  return song.title || song.name || "Untitled"
+}
+
+function getSongGenre(song: Song): string {
+  if (song.genre) return song.genre
+  if (song.style) return song.style
+  if (song.tags && song.tags.length > 0) return song.tags.join(", ")
+  return "Unknown genre"
+}
+
+function getSongDate(song: Song): string {
+  return song.createdAt || song.created_at || song.updatedAt || ""
+}
+
+function getSongId(song: Song, index: number): string {
+  return song.id || song._id || `song-${index}`
+}
+
+function timeAgo(dateStr: string) {
+  const date = new Date(dateStr)
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
+  if (seconds < 60) return "just now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `about ${hours} hour${hours > 1 ? "s" : ""} ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`
+  const weeks = Math.floor(days / 7)
+  return `${weeks} week${weeks > 1 ? "s" : ""} ago`
+}
 
 export default function Page() {
+  const [songs, setSongs] = useState<Song[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [credits, setCredits] = useState(0)
+  const [lastUpdated, setLastUpdated] = useState("")
+  const [token, setToken] = useState("")
+
+  const fetchHistory = useCallback(async () => {
+    const storedToken = localStorage.getItem("zeno_token")
+    if (!storedToken) {
+      setError("Not authenticated")
+      setLoading(false)
+      return
+    }
+    setToken(storedToken)
+    setLoading(true)
+    setError("")
+
+    try {
+      const res = await fetch(`${API_BASE}/music/history?limit=50`, {
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+          Accept: "application/json",
+        },
+      })
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem("zeno_token")
+          localStorage.removeItem("zeno_refresh_token")
+          localStorage.removeItem("zeno_user_id")
+          window.location.href = "/login"
+          return
+        }
+        throw new Error(`Failed to fetch history (${res.status})`)
+      }
+
+      const data = await res.json()
+      const history = Array.isArray(data) ? data : data.history || data.songs || data.data || []
+      setSongs(history)
+      setLastUpdated(new Date().toLocaleTimeString())
+
+      if (data.credits !== undefined) {
+        setCredits(data.credits)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load library")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchHistory()
+  }, [fetchHistory])
+
+  const hasCredits = credits > 0
   return (
     <SidebarProvider
       style={
@@ -34,112 +162,260 @@ export default function Page() {
         <SiteHeader />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <SectionCards />
+            <div className="flex flex-col gap-6 py-4 md:py-6">
 
-              {/* AI Music Generation */}
+              {/* Create Song Section */}
               <div className="px-4 lg:px-6">
-                <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                        <IconSparkles className="h-5 w-5 text-primary" />
+                <Card className="border-border/40">
+                  <CardContent className="p-6 space-y-5">
+                    {/* Header with credits */}
+                    <div className="flex items-center justify-between">
+                      <h1 className="text-2xl font-bold tracking-tight">Create Song</h1>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 rounded-lg border border-border/40 px-3 py-1.5">
+                          <IconCoin className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{credits} credits</span>
+                        </div>
+                        <Button variant="outline" size="sm">
+                          <IconPlus className="mr-1 h-3.5 w-3.5" />
+                          Top Up
+                        </Button>
                       </div>
-                      Create a new track
-                    </CardTitle>
-                    <CardDescription>
-                      Describe what you want and let AI compose it for you
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Prompt input */}
-                    <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-background/40 p-3">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <IconWand className="h-5 w-5 text-primary" />
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Describe your song... e.g. rainy lo-fi for late-night studying"
-                        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 outline-none"
-                      />
-                      <Button size="sm">
-                        <IconSparkles className="mr-1 h-3.5 w-3.5" />
-                        Generate
-                      </Button>
                     </div>
 
-                    {/* Genre tags */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Genre:</span>
-                      {genres.map((genre) => (
-                        <span
-                          key={genre}
-                          className="cursor-pointer rounded-full border border-border/40 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-                        >
-                          {genre}
-                        </span>
-                      ))}
+                    {/* No credits warning */}
+                    {!hasCredits && (
+                      <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                        <p className="text-sm text-amber-600 dark:text-amber-500">
+                          You have no credits left. Top up to create more songs.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Tabs: Cover Audio / Lyrics AI */}
+                    <Tabs defaultValue="cover">
+                      <TabsList className="grid w-full max-w-xs grid-cols-2">
+                        <TabsTrigger value="cover">Cover Audio</TabsTrigger>
+                        <TabsTrigger value="lyrics">Lyrics AI</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="cover" className="mt-5 space-y-5">
+                        {/* Song Title */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Song Title <span className="text-muted-foreground">(Optional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Summer Nights"
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
+                          />
+                        </div>
+
+                        {/* Style / Genre */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Style / Genre</label>
+                          <input
+                            type="text"
+                            placeholder="Afrobeats, Female Vocals, Upbeat, 100 BPM"
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
+                          />
+                        </div>
+
+                        {/* Genre tags */}
+                        <div className="flex flex-wrap gap-2">
+                          {genreTags.map((genre) => (
+                            <button
+                              key={genre}
+                              className="flex items-center gap-1 rounded-full border border-border/40 px-3 py-1 text-xs text-muted-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-foreground"
+                            >
+                              <IconPlus className="h-3 w-3" />
+                              {genre}
+                            </button>
+                          ))}
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="lyrics" className="mt-5 space-y-5">
+                        {/* Song Title */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Song Title <span className="text-muted-foreground">(Optional)</span></label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Summer Nights"
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
+                          />
+                        </div>
+
+                        {/* Style / Genre */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Style / Genre</label>
+                          <input
+                            type="text"
+                            placeholder="Afrobeats, Female Vocals, Upbeat, 100 BPM"
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
+                          />
+                        </div>
+
+                        {/* Genre tags */}
+                        <div className="flex flex-wrap gap-2">
+                          {genreTags.map((genre) => (
+                            <button
+                              key={genre}
+                              className="flex items-center gap-1 rounded-full border border-border/40 px-3 py-1 text-xs text-muted-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-foreground"
+                            >
+                              <IconPlus className="h-3 w-3" />
+                              {genre}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Lyrics */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Lyrics</label>
+                          <textarea
+                            rows={8}
+                            defaultValue={"[Verse 1]\n\n[Chorus]\n\n[Verse 2]"}
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30"
+                          />
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+
+                    {/* Privacy toggle */}
+                    <div className="flex items-center gap-3">
+                      <button className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-sm font-medium text-foreground">
+                        <IconLock className="h-4 w-4" />
+                        Private
+                      </button>
+                      <button className="flex items-center gap-2 rounded-lg border border-border/40 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                        <IconWorld className="h-4 w-4" />
+                        Public
+                      </button>
                     </div>
+
+                    {/* Create button */}
+                    <Button className="w-full" size="lg" disabled={!hasCredits}>
+                      <IconSparkles className="mr-2 h-4 w-4" />
+                      {hasCredits ? "Create Song" : "No Credits — Top Up First"}
+                    </Button>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Recent tracks */}
+              {/* My Library Section */}
               <div className="px-4 lg:px-6">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Recent tracks</h2>
-                  <Button variant="ghost" size="sm">
-                    View all
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-semibold">My Library</h2>
+                    {lastUpdated && (
+                      <span className="text-xs text-muted-foreground">Updated {lastUpdated}</span>
+                    )}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchHistory} disabled={loading}>
+                    <IconRefresh className={`mr-1 h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                    Refresh
                   </Button>
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {recentTracks.map((track) => (
-                    <Card
-                      key={track.title}
-                      className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30"
-                    >
-                      <div className={`relative h-28 bg-gradient-to-br ${track.color}`}>
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition-all group-hover:scale-110 group-hover:opacity-100">
-                            <IconPlayerPlay className="h-5 w-5 fill-white text-white" />
+
+                {/* Error state */}
+                {error && !loading && (
+                  <div className="flex flex-col items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 py-12 text-center">
+                    <p className="text-sm text-destructive">{error}</p>
+                    <Button variant="outline" size="sm" onClick={fetchHistory}>
+                      <IconRefresh className="mr-1 h-3.5 w-3.5" />
+                      Try again
+                    </Button>
+                  </div>
+                )}
+
+                {/* Loading state */}
+                {loading && (
+                  <div className="flex flex-col items-center gap-3 py-12">
+                    <IconLoader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Loading your library...</p>
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!loading && !error && songs.length === 0 && (
+                  <div className="flex flex-col items-center gap-3 rounded-lg border border-border/40 py-12 text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                      <IconMusic className="h-7 w-7 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold">No songs yet</h3>
+                    <p className="max-w-xs text-sm text-muted-foreground">
+                      Create your first song above and it will appear here.
+                    </p>
+                  </div>
+                )}
+
+                {/* Songs grid */}
+                {!loading && !error && songs.length > 0 && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {songs.map((song, i) => {
+                      const cover = getCoverUrl(song)
+                      return (
+                      <Card key={getSongId(song, i)} className="group cursor-pointer overflow-hidden p-0 transition-all hover:scale-[1.02] hover:border-primary/30">
+                        {/* Cover art */}
+                        <div className="relative h-32 bg-gradient-to-br from-orange-500 via-red-500 to-purple-600">
+                          {cover && (
+                            <img
+                              src={cover}
+                              alt={getSongTitle(song)}
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                          )}
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 opacity-0 backdrop-blur-sm transition-all group-hover:scale-110 group-hover:opacity-100">
+                              <IconPlayerPlay className="h-5 w-5 fill-white text-white" />
+                            </div>
+                          </div>
+                          <div className="absolute top-2 right-2">
+                            <span className="rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+                              {song.status || "completed"}
+                            </span>
                           </div>
                         </div>
-                        <div className="absolute bottom-2 left-3">
-                          <span className="rounded-full bg-black/30 px-2.5 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-                            {track.genre}
-                          </span>
+
+                        {/* Song info */}
+                        <div className="p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h3 className="truncate text-sm font-medium">{getSongTitle(song)}</h3>
+                            <button className="text-muted-foreground hover:text-foreground">
+                              <IconDots className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              {song.visibility || (song.isPublic ? "Public" : "Private")}
+                            </span>
+                          </div>
+
+                          <p className="truncate text-xs text-muted-foreground">
+                            {getSongGenre(song)}
+                          </p>
+
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <IconMessage2 className="h-3 w-3" />
+                              {song.comments || song.commentCount || 0}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <IconEye className="h-3 w-3" />
+                              {song.plays || song.playCount || song.views || 0}
+                            </span>
+                            <span className="ml-auto text-[10px]">
+                              {getSongDate(song) ? timeAgo(getSongDate(song)) : ""}
+                            </span>
+                          </div>
                         </div>
-                        <div className="absolute bottom-2 right-3 flex items-center gap-1 text-xs text-white/80">
-                          <IconClock className="h-3 w-3" />
-                          {track.duration}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between p-3">
-                        <div>
-                          <h3 className="truncate text-sm font-medium">{track.title}</h3>
-                          <p className="mt-0.5 text-xs text-muted-foreground">{track.date}</p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-primary">
-                            <IconHeart className="h-4 w-4" />
-                          </button>
-                          <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                            <IconDownload className="h-4 w-4" />
-                          </button>
-                          <button className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-                            <IconDots className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                      </Card>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
-              {/* Chart */}
-              <div className="px-4 lg:px-6">
-                <ChartAreaInteractive />
-              </div>
             </div>
           </div>
         </div>

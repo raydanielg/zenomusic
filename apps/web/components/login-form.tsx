@@ -8,18 +8,154 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
-  FieldSeparator,
 } from "@workspace/ui/components/field"
 import { Input } from "@workspace/ui/components/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@workspace/ui/components/tabs"
-import { IconMusic, IconArrowLeft, IconCheck } from "@tabler/icons-react"
+import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from "@workspace/ui/components/input-otp"
+import { IconMusic, IconArrowLeft, IconCheck, IconPhone, IconShieldCheck } from "@tabler/icons-react"
+
+function GoogleIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+    </svg>
+  )
+}
+
+function FacebookIcon() {
+  return (
+    <svg className="h-4 w-4" viewBox="0 0 24 24">
+      <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+    </svg>
+  )
+}
+
+const API_BASE = "https://zenomusic.io/api"
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const [tab, setTab] = useState("login")
-  const [forgotSent, setForgotSent] = useState(false)
+
+  const [phone, setPhone] = useState("")
+
+  function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const digits = e.target.value.replace(/\D/g, "").slice(0, 9)
+    setPhone(digits)
+  }
+
+  const fullPhone = `255${phone}`
+  const [otp, setOtp] = useState("")
+  const [step, setStep] = useState<"phone" | "otp">("phone")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: fullPhone }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = data.message || data.error || data.errors?.[0]?.msg || `Failed to send OTP (${res.status})`
+        throw new Error(msg)
+      }
+
+      setStep("otp")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault()
+    setError("")
+    setLoading(true)
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: fullPhone, code: otp }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        const msg = data.message || data.error || data.errors?.[0]?.msg || `Verification failed (${res.status})`
+        throw new Error(msg)
+      }
+
+      if (!data.token) {
+        throw new Error("No token received from server")
+      }
+
+      // Step 2: Sign in with Firebase custom token
+      const firebaseRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=AIzaSyAXuU0KS8JHgenZN2xtNF9ELOjO_jnl86k`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: data.token, returnSecureToken: true }),
+        }
+      )
+
+      const firebaseData = await firebaseRes.json().catch(() => ({}))
+
+      if (!firebaseRes.ok) {
+        throw new Error(firebaseData.error?.message || "Firebase auth failed")
+      }
+
+      const idToken = firebaseData.idToken
+
+      // Step 3: Sync signin with backend
+      await fetch(`${API_BASE}/auth/signin-sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({}),
+      })
+
+      // Store tokens
+      localStorage.setItem("zeno_token", idToken)
+      localStorage.setItem("zeno_refresh_token", firebaseData.refreshToken || "")
+      localStorage.setItem("zeno_user_id", firebaseData.localId || "")
+
+      setSuccess(true)
+      setTimeout(() => {
+        window.location.href = "/dashboard"
+      }, 1500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function resetFlow() {
+    setStep("phone")
+    setPhone("")
+    setOtp("")
+    setError("")
+    setSuccess(false)
+  }
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -40,159 +176,312 @@ export function LoginForm({
           <TabsTrigger value="register">Sign up</TabsTrigger>
         </TabsList>
 
-        {/* Login Tab */}
+        {/* Login Tab - Phone OTP */}
         <TabsContent value="login">
-          <form className="flex flex-col gap-4">
-            <FieldGroup>
-              <div className="flex flex-col items-center gap-1 text-center">
-                <h2 className="text-xl font-semibold">Welcome back</h2>
-                <p className="text-sm text-muted-foreground">
-                  Enter your email to sign in to your account
-                </p>
-              </div>
-              <Field>
-                <FieldLabel htmlFor="login-email">Email</FieldLabel>
-                <Input id="login-email" type="email" placeholder="m@example.com" required />
-              </Field>
-              <Field>
-                <div className="flex items-center">
-                  <FieldLabel htmlFor="login-password">Password</FieldLabel>
-                  <button
-                    type="button"
-                    onClick={() => setTab("forgot")}
-                    className="ms-auto text-sm text-muted-foreground underline-offset-4 hover:underline"
-                  >
-                    Forgot password?
-                  </button>
+          <FieldGroup>
+            {success ? (
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <IconCheck className="h-8 w-8 text-primary" />
                 </div>
-                <Input id="login-password" type="password" required />
-              </Field>
-              <Field>
-                <Button type="submit" className="w-full">Sign in</Button>
-              </Field>
-              <FieldSeparator>Or continue with</FieldSeparator>
-              <Field>
-                <Button variant="outline" type="button" className="w-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
-                    <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" fill="currentColor" />
-                  </svg>
-                  Continue with GitHub
-                </Button>
-              </Field>
-              <FieldDescription className="text-center">
-                Don&apos;t have an account?{" "}
-                <button type="button" onClick={() => setTab("register")} className="font-medium text-foreground underline underline-offset-4">
-                  Sign up
-                </button>
-              </FieldDescription>
-            </FieldGroup>
-          </form>
-        </TabsContent>
-
-        {/* Register Tab */}
-        <TabsContent value="register">
-          <form className="flex flex-col gap-4">
-            <FieldGroup>
-              <div className="flex flex-col items-center gap-1 text-center">
-                <h2 className="text-xl font-semibold">Create your account</h2>
-                <p className="text-sm text-muted-foreground">
-                  Start generating original music with AI in seconds
+                <h2 className="text-xl font-semibold">Welcome back!</h2>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  Login successful. Redirecting to your studio...
                 </p>
               </div>
-              <Field>
-                <FieldLabel htmlFor="register-name">Full name</FieldLabel>
-                <Input id="register-name" type="text" placeholder="John Doe" required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="register-email">Email</FieldLabel>
-                <Input id="register-email" type="email" placeholder="m@example.com" required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="register-password">Password</FieldLabel>
-                <Input id="register-password" type="password" placeholder="Create a password" required />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="register-confirm">Confirm password</FieldLabel>
-                <Input id="register-confirm" type="password" placeholder="Confirm your password" required />
-              </Field>
-              <Field>
-                <Button type="submit" className="w-full">Create account</Button>
-              </Field>
-              <FieldSeparator>Or continue with</FieldSeparator>
-              <Field>
-                <Button variant="outline" type="button" className="w-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
-                    <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" fill="currentColor" />
-                  </svg>
-                  Continue with GitHub
-                </Button>
-              </Field>
-              <FieldDescription className="text-center">
-                Already have an account?{" "}
-                <button type="button" onClick={() => setTab("login")} className="font-medium text-foreground underline underline-offset-4">
-                  Sign in
-                </button>
-              </FieldDescription>
-            </FieldGroup>
-          </form>
-        </TabsContent>
-
-        {/* Forgot Password Tab (hidden from tab list) */}
-        <TabsContent value="forgot">
-          <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              setForgotSent(true)
-            }}
-          >
-            <FieldGroup>
-              <button
-                type="button"
-                onClick={() => { setTab("login"); setForgotSent(false) }}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-              >
-                <IconArrowLeft className="h-4 w-4" />
-                Back to sign in
-              </button>
-
-              {forgotSent ? (
-                <div className="flex flex-col items-center gap-3 py-6 text-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-                    <IconCheck className="h-7 w-7 text-primary" />
-                  </div>
-                  <h2 className="text-xl font-semibold">Check your email</h2>
-                  <p className="max-w-xs text-sm text-muted-foreground">
-                    We&apos;ve sent you a password reset link. Check your inbox and follow the instructions.
+            ) : step === "phone" ? (
+              <form className="flex flex-col gap-4" onSubmit={handleSendOtp}>
+                <div className="flex flex-col items-center gap-1 text-center">
+                  <h2 className="text-xl font-semibold">Welcome back</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Enter your phone number to receive a code
                   </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-2"
-                    onClick={() => { setTab("login"); setForgotSent(false) }}
-                  >
-                    Back to sign in
+                </div>
+
+                {error && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="login-phone">Phone number</FieldLabel>
+                  <div className="flex items-center rounded-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+                    <span className="flex items-center gap-1.5 border-r border-input px-3 py-2 text-sm font-medium text-muted-foreground">
+                      <IconPhone className="h-4 w-4" />
+                      +255
+                    </span>
+                    <input
+                      id="login-phone"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="712 345 678"
+                      required
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      className="flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60"
+                    />
+                  </div>
+                </Field>
+
+                <Field>
+                  <Button type="submit" className="w-full" disabled={loading || phone.length < 9}>
+                    {loading ? "Sending code..." : "Send code"}
+                  </Button>
+                </Field>
+
+                <div className="relative my-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button variant="outline" type="button" className="w-full">
+                    <GoogleIcon />
+                    Google
+                  </Button>
+                  <Button variant="outline" type="button" className="w-full">
+                    <FacebookIcon />
+                    Facebook
                   </Button>
                 </div>
-              ) : (
-                <>
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    <h2 className="text-xl font-semibold">Forgot password?</h2>
-                    <p className="text-sm text-muted-foreground">
-                      Enter your email and we&apos;ll send you a reset link
-                    </p>
+
+                <FieldDescription className="text-center">
+                  Don&apos;t have an account?{" "}
+                  <button type="button" onClick={() => setTab("register")} className="font-medium text-foreground underline underline-offset-4">
+                    Sign up
+                  </button>
+                </FieldDescription>
+              </form>
+            ) : (
+              <form className="flex flex-col gap-4" onSubmit={handleVerifyOtp}>
+                <button
+                  type="button"
+                  onClick={resetFlow}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <IconArrowLeft className="h-4 w-4" />
+                  Change number
+                </button>
+
+                <div className="flex flex-col items-center gap-1 text-center">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                    <IconShieldCheck className="h-6 w-6 text-primary" />
                   </div>
-                  <Field>
-                    <FieldLabel htmlFor="forgot-email">Email</FieldLabel>
-                    <Input id="forgot-email" type="email" placeholder="m@example.com" required />
-                  </Field>
-                  <Field>
-                    <Button type="submit" className="w-full">Send reset link</Button>
-                  </Field>
-                </>
-              )}
-            </FieldGroup>
-          </form>
+                  <h2 className="text-xl font-semibold">Enter verification code</h2>
+                  <p className="text-sm text-muted-foreground">
+                    We sent a code to <span className="font-medium text-foreground">{fullPhone}</span>
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="login-otp">Verification code</FieldLabel>
+                  <div className="flex justify-center">
+                    <InputOTP
+                      id="login-otp"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(v) => setOtp(v)}
+                      containerClassName="justify-center"
+                    >
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} className="size-10 text-sm" />
+                        <InputOTPSlot index={1} className="size-10 text-sm" />
+                        <InputOTPSlot index={2} className="size-10 text-sm" />
+                      </InputOTPGroup>
+                      <InputOTPSeparator />
+                      <InputOTPGroup>
+                        <InputOTPSlot index={3} className="size-10 text-sm" />
+                        <InputOTPSlot index={4} className="size-10 text-sm" />
+                        <InputOTPSlot index={5} className="size-10 text-sm" />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                </Field>
+
+                <Field>
+                  <Button type="submit" className="w-full" disabled={loading || otp.length < 6}>
+                    {loading ? "Verifying..." : "Verify & sign in"}
+                  </Button>
+                </Field>
+
+                <FieldDescription className="text-center">
+                  Didn&apos;t receive the code?{" "}
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    className="font-medium text-foreground underline underline-offset-4"
+                  >
+                    Resend
+                  </button>
+                </FieldDescription>
+              </form>
+            )}
+          </FieldGroup>
+        </TabsContent>
+
+        {/* Register Tab - Phone OTP */}
+        <TabsContent value="register">
+          <FieldGroup>
+            {success ? (
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+                  <IconCheck className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-xl font-semibold">Account created!</h2>
+                <p className="max-w-xs text-sm text-muted-foreground">
+                  Welcome to ZenoMusic. Redirecting to your studio...
+                </p>
+              </div>
+            ) : step === "phone" ? (
+              <form className="flex flex-col gap-4" onSubmit={handleSendOtp}>
+                <div className="flex flex-col items-center gap-1 text-center">
+                  <h2 className="text-xl font-semibold">Create your account</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Enter your phone number to get started
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="register-phone">Phone number</FieldLabel>
+                  <div className="flex items-center rounded-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+                    <span className="flex items-center gap-1.5 border-r border-input px-3 py-2 text-sm font-medium text-muted-foreground">
+                      <IconPhone className="h-4 w-4" />
+                      +255
+                    </span>
+                    <input
+                      id="register-phone"
+                      type="tel"
+                      inputMode="numeric"
+                      placeholder="712 345 678"
+                      required
+                      value={phone}
+                      onChange={handlePhoneChange}
+                      className="flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground/60"
+                    />
+                  </div>
+                </Field>
+
+                <Field>
+                  <Button type="submit" className="w-full" disabled={loading || phone.length < 9}>
+                    {loading ? "Sending code..." : "Send code"}
+                  </Button>
+                </Field>
+
+                <div className="relative my-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Button variant="outline" type="button" className="w-full">
+                    <GoogleIcon />
+                    Google
+                  </Button>
+                  <Button variant="outline" type="button" className="w-full">
+                    <FacebookIcon />
+                    Facebook
+                  </Button>
+                </div>
+
+                <FieldDescription className="text-center">
+                  Already have an account?{" "}
+                  <button type="button" onClick={() => setTab("login")} className="font-medium text-foreground underline underline-offset-4">
+                    Sign in
+                  </button>
+                </FieldDescription>
+              </form>
+            ) : (
+              <form className="flex flex-col gap-4" onSubmit={handleVerifyOtp}>
+                <button
+                  type="button"
+                  onClick={resetFlow}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <IconArrowLeft className="h-4 w-4" />
+                  Change number
+                </button>
+
+                <div className="flex flex-col items-center gap-1 text-center">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                    <IconShieldCheck className="h-6 w-6 text-primary" />
+                  </div>
+                  <h2 className="text-xl font-semibold">Verify your number</h2>
+                  <p className="text-sm text-muted-foreground">
+                    We sent a code to <span className="font-medium text-foreground">{fullPhone}</span>
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="register-otp">Verification code</FieldLabel>
+                  <div className="flex justify-center">
+                    <InputOTP
+                      id="register-otp"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(v) => setOtp(v)}
+                      containerClassName="justify-center"
+                    >
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} className="size-10 text-sm" />
+                        <InputOTPSlot index={1} className="size-10 text-sm" />
+                        <InputOTPSlot index={2} className="size-10 text-sm" />
+                      </InputOTPGroup>
+                      <InputOTPSeparator />
+                      <InputOTPGroup>
+                        <InputOTPSlot index={3} className="size-10 text-sm" />
+                        <InputOTPSlot index={4} className="size-10 text-sm" />
+                        <InputOTPSlot index={5} className="size-10 text-sm" />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                </Field>
+
+                <Field>
+                  <Button type="submit" className="w-full" disabled={loading || otp.length < 6}>
+                    {loading ? "Verifying..." : "Verify & create account"}
+                  </Button>
+                </Field>
+
+                <FieldDescription className="text-center">
+                  Didn&apos;t receive the code?{" "}
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    className="font-medium text-foreground underline underline-offset-4"
+                  >
+                    Resend
+                  </button>
+                </FieldDescription>
+              </form>
+            )}
+          </FieldGroup>
         </TabsContent>
       </Tabs>
     </div>

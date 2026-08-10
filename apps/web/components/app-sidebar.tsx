@@ -2,7 +2,6 @@
 
 import * as React from "react"
 
-import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
@@ -15,78 +14,92 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@workspace/ui/components/sidebar"
-import { IconMusic, IconSparkles, IconLibrary, IconBolt, IconClock, IconDownload, IconSettings, IconHelp, IconSearch, IconPlaylist, IconHeart, IconHistory, IconStar } from "@tabler/icons-react"
+import { IconMusic, IconSparkles, IconLibrary, IconVideo, IconCompass, IconPlaylist, IconUser, IconLogout } from "@tabler/icons-react"
+
+const API_BASE = "https://zenomusic.io/api"
 
 const data = {
-  user: {
-    name: "Amani J.",
-    email: "amani@zenomusic.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
       title: "Create",
-      url: "#",
+      url: "/dashboard",
       icon: <IconSparkles />,
     },
     {
-      title: "My Library",
-      url: "#",
+      title: "Library",
+      url: "/dashboard/library",
       icon: <IconLibrary />,
     },
     {
-      title: "Recent",
-      url: "#",
-      icon: <IconClock />,
+      title: "Video",
+      url: "/dashboard/video",
+      icon: <IconVideo />,
     },
     {
-      title: "Favorites",
-      url: "#",
-      icon: <IconHeart />,
+      title: "Discover",
+      url: "/dashboard/discover",
+      icon: <IconCompass />,
     },
     {
       title: "Playlists",
-      url: "#",
+      url: "/dashboard/playlists",
       icon: <IconPlaylist />,
+    },
+    {
+      title: "Profile",
+      url: "/dashboard/profile",
+      icon: <IconUser />,
     },
   ],
   navClouds: [],
   navSecondary: [
     {
-      title: "Settings",
-      url: "#",
-      icon: <IconSettings />,
-    },
-    {
-      title: "Get Help",
-      url: "#",
-      icon: <IconHelp />,
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: <IconSearch />,
+      title: "Sign Out",
+      url: "/login",
+      icon: <IconLogout />,
     },
   ],
-  documents: [
-    {
-      name: "Downloaded",
-      url: "#",
-      icon: <IconDownload />,
-    },
-    {
-      name: "History",
-      url: "#",
-      icon: <IconHistory />,
-    },
-    {
-      name: "Top Rated",
-      url: "#",
-      icon: <IconStar />,
-    },
-  ],
+  documents: [],
 }
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [user, setUser] = React.useState({
+    name: "Zeno User",
+    email: "Loading...",
+    avatar: "/avatars/shadcn.jpg",
+  })
+
+  React.useEffect(() => {
+    const token = localStorage.getItem("zeno_token")
+    if (!token) return
+
+    async function fetchUser() {
+      try {
+        const res = await fetch(`${API_BASE}/auth/signin-sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({}),
+        })
+
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}))
+          const userId = localStorage.getItem("zeno_user_id") || ""
+          setUser({
+            name: data.name || data.displayName || data.phoneNumber || `User ${userId.slice(-4)}`,
+            email: `${data.credits ?? 0} credits`,
+            avatar: data.photoURL || "/avatars/shadcn.jpg",
+          })
+        }
+      } catch {
+        // Silent fail — keep default user
+      }
+    }
+
+    fetchUser()
+  }, [])
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -106,11 +119,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavDocuments items={data.documents} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )

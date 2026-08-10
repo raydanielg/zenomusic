@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Button } from "@workspace/ui/components/button"
 import {
   SidebarGroup,
@@ -27,9 +28,9 @@ export function NavMain({
             <SidebarMenuButton
               tooltip="Create Track"
               className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
+              render={<Link href="/dashboard" />}
             >
-              <IconCirclePlusFilled
-              />
+              <IconCirclePlusFilled />
               <span>Create Track</span>
             </SidebarMenuButton>
             <Button
@@ -37,8 +38,7 @@ export function NavMain({
               className="size-8 group-data-[collapsible=icon]:opacity-0"
               variant="outline"
             >
-              <IconSparkles
-              />
+              <IconSparkles />
               <span className="sr-only">AI Generate</span>
             </Button>
           </SidebarMenuItem>
@@ -46,7 +46,7 @@ export function NavMain({
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton tooltip={item.title}>
+              <SidebarMenuButton tooltip={item.title} render={<Link href={item.url} />}>
                 {item.icon}
                 <span>{item.title}</span>
               </SidebarMenuButton>
